@@ -45,6 +45,9 @@ def should_check_csrf(request: Request) -> bool:
     if is_auth_disabled():
         return False
 
+    if request.url.path.startswith("/api/public/agents/"):
+        return False
+
     path = request.url.path.rstrip("/")
     # Exempt /api/v1/auth/me endpoint
     if path == "/api/v1/auth/me":

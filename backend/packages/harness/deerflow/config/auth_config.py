@@ -81,8 +81,21 @@ class LocalAuthConfig(BaseModel):
     )
 
 
+class CASAppConfig(BaseModel):
+    """CAS 2.0/3.0 single sign-on configuration (Yixin/Teamshub SSO)."""
+
+    enabled: bool = Field(default=False, description="Enable CAS SSO authentication")
+    display_name: str = Field(default="易信登录", description="Display name shown on the login button")
+    login_url: str = Field(default="", description="CAS login page URL (e.g. https://.../sso/login)")
+    validate_url: str = Field(default="", description="CAS serviceValidate URL for ticket validation")
+    logout_url: str = Field(default="", description="CAS logout URL")
+    service_url: str = Field(default="", description="Callback (service) URL passed to the CAS server")
+    email_domain: str = Field(default="", description="Email suffix appended to the CAS user identifier")
+
+
 class AuthAppConfig(BaseModel):
     """Authentication configuration section for the DeerFlow app config."""
 
     oidc: OIDCAuthConfig = Field(default_factory=OIDCAuthConfig, description="OIDC SSO authentication settings")
     local: LocalAuthConfig = Field(default_factory=LocalAuthConfig, description="Built-in email/password authentication settings")
+    cas: CASAppConfig = Field(default_factory=CASAppConfig, description="CAS SSO authentication settings (Yixin)")

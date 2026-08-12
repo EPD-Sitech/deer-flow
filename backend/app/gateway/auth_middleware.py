@@ -37,6 +37,8 @@ _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
     "/api/v1/auth/oauth/",
     "/api/v1/auth/callback/",
     "/api/public/agents/",
+    # CAS SSO: login / callback / logout are all reached while unauthenticated.
+    "/api/v1/auth/cas/",
     # Inbound webhooks authenticate themselves via provider-specific signatures
     # (e.g. GitHub's X-Hub-Signature-256), not session cookies.
     "/api/webhooks/",

@@ -334,6 +334,21 @@ export default function LoginPage() {
                 className="w-full"
                 disabled={loading}
                 onClick={() => {
+                  // CAS providers fetch their login URL from the backend first;
+                  // OIDC providers keep the direct authorize-URL redirect.
+                  if (provider.type === "cas") {
+                    void fetch("/api/v1/auth/cas/login")
+                      .then((resp) => (resp.ok ? resp.json() : null))
+                      .then(
+                        (data: { loginUrl?: string } | null) => {
+                          if (data?.loginUrl) {
+                            window.location.href = data.loginUrl;
+                          }
+                        },
+                      )
+                      .catch(() => undefined);
+                    return;
+                  }
                   window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
                 }}
               >

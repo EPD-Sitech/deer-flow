@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SKILL_CATEGORIES } from "@/core/skills/categories";
 import { useCreateSkill } from "@/core/skills/extended";
 
 interface CreateSkillDialogProps {
@@ -124,13 +125,19 @@ export function CreateSkillDialog({
             <label htmlFor="cs-cat" className="text-sm font-medium">
               分类（可选）
             </label>
-            <Input
+            <select
               id="cs-cat"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="例如：客户洞察、数据分析、企业办公"
-              maxLength={64}
-            />
+              className="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <option value="">未分类</option>
+              {SKILL_CATEGORIES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <label htmlFor="cs-tags" className="text-sm font-medium">

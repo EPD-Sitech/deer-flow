@@ -30,7 +30,6 @@ from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_config, require_admin_user
 from app.gateway.skills_metadata import (
-    batch_save_skill_metadata,
     delete_skill_metadata_entry,
     generate_skill_metadata_with_retry,
     get_skill_metadata_entry,
@@ -165,10 +164,6 @@ class SkillMetadataGenerateResponse(BaseModel):
     attempts: int = 0
     metadata: SkillMetadataResponse | None = None
     message: str
-
-
-class BatchSaveMetadataRequest(BaseModel):
-    metadata: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class SkillInstallResponse(BaseModel):
@@ -355,38 +350,6 @@ async def generate_skill_metadata(
         metadata=SkillMetadataResponse(**result["metadata"]) if result["metadata"] else None,
         message=result["message"],
     )
-
-
-@router.post("/skills/metadata/batch-save", summary="Batch Save Generated Skill Metadata")
-async def batch_save_generated_metadata(
-    body: BatchSaveMetadataRequest,
-    request: Request,
-) -> dict:
-    await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
-    if not body.metadata:
-        raise HTTPException(status_code=422, detail="metadata is required")
-
-    normalized: dict[str, dict[str, Any]] = {}
-    for name, fields in body.metadata.items():
-        if not isinstance(fields, dict):
-            continue
-        entry = get_skill_metadata_entry(name) or {}
-        for key in (
-            "display_name",
-            "description_zh",
-            "safety_level",
-            "capabilities",
-            "recommended_scenarios",
-        ):
-            value = fields.get(key)
-            if isinstance(value, str):
-                entry[key] = value.strip()
-            elif value is not None:
-                entry[key] = str(value)
-        normalized[name] = entry
-
-    batch_save_skill_metadata(normalized)
-    return {"success": True, "saved": len(normalized)}
 
 
 # ── Import / export / create ─────────────────────────────────────────────────

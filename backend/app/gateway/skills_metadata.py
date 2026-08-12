@@ -111,16 +111,6 @@ def save_skill_metadata_entry(
     _write_skill_metadata(data, user_id)
 
 
-def batch_save_skill_metadata(
-    metadata: dict[str, dict[str, Any]],
-    user_id: str | None = None,
-) -> None:
-    """Merge several skills' metadata entries in a single write."""
-    data = load_skill_metadata(user_id)
-    data.update(metadata)
-    _write_skill_metadata(data, user_id)
-
-
 def delete_skill_metadata_entry(skill_name: str, user_id: str | None = None) -> None:
     data = load_skill_metadata(user_id)
     if skill_name in data:

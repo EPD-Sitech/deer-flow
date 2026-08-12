@@ -7,7 +7,6 @@ import {
   PlusIcon,
   PuzzleIcon,
   SearchIcon,
-  SparklesIcon,
   Trash2Icon,
   UploadIcon,
 } from "lucide-react";
@@ -24,16 +23,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import { SkillRequestError } from "@/core/skills/api";
 import { SKILL_CATEGORIES } from "@/core/skills/categories";
 import { exportSkillsBatch } from "@/core/skills/extended";
-import {
-  useBatchDeleteSkills,
-  useBatchGenerateSkillMetadata,
-} from "@/core/skills/extended";
+import { useBatchDeleteSkills } from "@/core/skills/extended";
 import { useSkills } from "@/core/skills/hooks";
 import type { Skill } from "@/core/skills/type";
 
@@ -47,7 +42,6 @@ export function SkillsGallery() {
   const { skills, isLoading, error } = useSkills();
   const { user } = useAuth();
   const canManage = !!user;
-  const canGenerateAllMetadata = user?.system_role === "admin";
 
   // Local tab state (no top tabs — the gallery is the whole page)
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,21 +49,7 @@ export function SkillsGallery() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
-  const [failedMetadataSkillNames, setFailedMetadataSkillNames] = useState<
-    string[]
-  >([]);
-  const [batchProgress, setBatchProgress] = useState<{
-    completed: number;
-    total: number;
-    currentSkill: string;
-    generated: number;
-    skipped: number;
-    failed: number;
-  } | null>(null);
   const batchDelete = useBatchDeleteSkills();
-  const batchGenerateMetadata = useBatchGenerateSkillMetadata((progress) => {
-    setBatchProgress(progress);
-  });
   const [detailSkill, setDetailSkill] = useState<Skill | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -166,83 +146,6 @@ export function SkillsGallery() {
     });
   }, [manageableFilteredSkills]);
 
-  async function handleBatchGenerateMetadata() {
-    if (selectedSkills.size === 0 && !canGenerateAllMetadata) return;
-
-    const names =
-      selectedSkills.size > 0
-        ? [...selectedSkills]
-        : filteredSkills.map((s) => s.name);
-    if (names.length === 0) return;
-
-    setBatchProgress({
-      completed: 0,
-      total: names.length,
-      currentSkill: "",
-      generated: 0,
-      skipped: 0,
-      failed: 0,
-    });
-    try {
-      const result = await batchGenerateMetadata.mutateAsync({
-        skill_names: names,
-        skip_existing: true,
-        retries: 1,
-      });
-
-      const failedNames =
-        result.results
-          ?.filter((item: { status: string }) => item.status === "failed")
-          .map((item: { skill_name: string }) => item.skill_name) ?? [];
-      setFailedMetadataSkillNames(failedNames);
-
-      if (result.failed > 0) {
-        toast.warning(
-          `生成完成：成功 ${result.generated}，跳过 ${result.skipped}，失败 ${result.failed}`,
-        );
-      } else {
-        toast.success(
-          `生成完成：成功 ${result.generated}，跳过 ${result.skipped}，失败 ${result.failed}`,
-        );
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBatchProgress(null);
-    }
-  }
-
-  async function handleRetryFailedMetadata() {
-    if (failedMetadataSkillNames.length === 0) return;
-    setBatchProgress({
-      completed: 0,
-      total: failedMetadataSkillNames.length,
-      currentSkill: "",
-      generated: 0,
-      skipped: 0,
-      failed: 0,
-    });
-    try {
-      const result = await batchGenerateMetadata.mutateAsync({
-        skill_names: failedMetadataSkillNames,
-        skip_existing: false,
-        retries: 1,
-      });
-      const stillFailed =
-        result.results
-          ?.filter((item: { status: string }) => item.status === "failed")
-          .map((item: { skill_name: string }) => item.skill_name) ?? [];
-      setFailedMetadataSkillNames(stillFailed);
-      toast.success(
-        `生成完成：成功 ${result.generated}，跳过 ${result.skipped}，失败 ${result.failed}`,
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBatchProgress(null);
-    }
-  }
-
   const adminRequired =
     error instanceof SkillRequestError && error.isAdminRequired;
 
@@ -271,24 +174,6 @@ export function SkillsGallery() {
             </div>
             {canManage ? (
               <div className="flex shrink-0 flex-wrap gap-2">
-                {canGenerateAllMetadata &&
-                  filteredSkills.length > 0 && (
-                    <Button
-                      variant="outline"
-                      className="h-9 flex-1 rounded-[8px] border-[#d8e5ef] bg-white px-3 text-xs text-[#49677f] shadow-none hover:bg-[#f3f8fc] hover:text-[#274f72] sm:flex-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                      onClick={handleBatchGenerateMetadata}
-                      disabled={batchGenerateMetadata.isPending}
-                    >
-                      {batchGenerateMetadata.isPending ? (
-                        <LoaderIcon className="mr-1.5 size-3.5 animate-spin" />
-                      ) : (
-                        <SparklesIcon className="mr-1.5 size-3.5" />
-                      )}
-                      {batchGenerateMetadata.isPending
-                        ? "生成中..."
-                        : "一键生成全部中文描述"}
-                    </Button>
-                  )}
                 <Button
                   variant="outline"
                   className="h-9 flex-1 rounded-[8px] border-[#d8e5ef] bg-white px-3 text-xs text-[#49677f] shadow-none hover:bg-[#f3f8fc] hover:text-[#274f72] sm:flex-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100"
@@ -407,73 +292,11 @@ export function SkillsGallery() {
           </Button>
           <Button
             size="sm"
-            variant="outline"
-            className="h-7 border-sky-200 text-sky-700 hover:bg-[var(--gp-surface-from)]"
-            onClick={handleBatchGenerateMetadata}
-            disabled={batchGenerateMetadata.isPending}
-          >
-            {batchGenerateMetadata.isPending ? (
-              <LoaderIcon className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <SparklesIcon className="mr-1 h-3.5 w-3.5" />
-            )}
-            {batchGenerateMetadata.isPending
-              ? "生成中..."
-              : "生成选中中文描述"}
-          </Button>
-          <Button
-            size="sm"
             variant="ghost"
             className="text-text-muted h-7"
             onClick={clearSelection}
           >
             取消
-          </Button>
-        </div>
-      )}
-
-      {/* 批量生成进度条 */}
-      {batchProgress && (
-        <div className="flex flex-col gap-1.5 border-b border-[color:var(--gp-border)] bg-[rgba(244,249,255,0.92)] px-6 py-3">
-          <div className="text-muted-foreground flex items-center justify-between gap-2 text-xs">
-            <span className="shrink-0">
-              生成进度 {batchProgress.completed}/{batchProgress.total}
-            </span>
-            <span className="shrink-0">
-              成功 {batchProgress.generated} · 跳过 {batchProgress.skipped} ·
-              失败 {batchProgress.failed}
-            </span>
-          </div>
-          <Progress
-            value={
-              batchProgress.total > 0
-                ? (batchProgress.completed / batchProgress.total) * 100
-                : 0
-            }
-          />
-          {batchProgress.currentSkill && (
-            <div className="text-muted-foreground/70 truncate text-xs">
-              ⏳ {batchProgress.currentSkill}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 失败重试提示 */}
-      {failedMetadataSkillNames.length > 0 && !batchProgress && (
-        <div className="flex items-center gap-3 border-b border-[color:var(--gp-border)] bg-amber-50/70 px-6 py-2">
-          <span className="text-sm text-amber-800">
-            {failedMetadataSkillNames.length} 个技能生成失败
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 border-amber-200 text-amber-700 hover:bg-amber-50"
-            onClick={handleRetryFailedMetadata}
-            disabled={batchGenerateMetadata.isPending}
-          >
-            <SparklesIcon className="mr-1 h-3.5 w-3.5" />
-            重试失败项
           </Button>
         </div>
       )}

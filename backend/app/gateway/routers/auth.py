@@ -632,18 +632,24 @@ async def list_auth_providers():
     app_config = get_app_config()
     oidc_config = app_config.auth.oidc
 
-    if not oidc_config.enabled:
-        return {"providers": []}
-
     providers = []
-    for provider_id, provider_cfg in oidc_config.providers.items():
-        providers.append(
-            {
-                "id": provider_id,
-                "display_name": provider_cfg.display_name,
-                "type": "oidc",
-            }
-        )
+
+    if oidc_config.enabled:
+        for provider_id, provider_cfg in oidc_config.providers.items():
+            providers.append(
+                {
+                    "id": provider_id,
+                    "display_name": provider_cfg.display_name,
+                    "type": "oidc",
+                }
+            )
+
+    from app.gateway.auth.cas_config import get_cas_provider_info
+
+    cas_provider = get_cas_provider_info()
+    if cas_provider is not None:
+        providers.append(cas_provider)
+
     return {"providers": providers}
 
 

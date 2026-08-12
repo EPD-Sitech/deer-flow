@@ -19,6 +19,7 @@ from app.gateway.routers import (
     assistants_compat,
     auth,
     browser,
+    cas_sso,
     channel_connections,
     channels,
     console,
@@ -694,6 +695,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Auth API is mounted at /api/v1/auth
     app.include_router(auth.router)
+
+    # CAS SSO API is mounted at /api/v1/auth/cas
+    app.include_router(cas_sso.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback
     app.include_router(feedback.router)

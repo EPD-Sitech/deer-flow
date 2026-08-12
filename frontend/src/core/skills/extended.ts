@@ -36,56 +36,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
-import { loadSkills, SkillRequestError, type InstallSkillResponse } from "./api";
+import { SkillRequestError, type InstallSkillResponse } from "./api";
 import type { Skill } from "./type";
 
 // ── Types ───────────────────────────────────────────────────────────────────
-
-export interface SkillMetadata {
-  display_name?: string | null;
-  description_zh?: string | null;
-  safety_level?: string | null;
-  capabilities?: string | null;
-  recommended_scenarios?: string | null;
-}
 
 export interface BatchDeleteSkillsResponse {
   success: boolean;
   deleted: string[];
   failed: { skill_name: string; detail: string }[];
-  message: string;
-}
-
-export interface GenerateSkillMetadataResponse {
-  success: boolean;
-  skill_name: string;
-  skipped: boolean;
-  attempts: number;
-  metadata?: SkillMetadata | null;
-  message: string;
-}
-
-export interface BatchGenerateSkillMetadataRequest {
-  skill_names: string[];
-  skip_existing?: boolean;
-  retries?: number;
-}
-
-export interface BatchGenerateSkillMetadataItemResponse {
-  skill_name: string;
-  status: "generated" | "skipped" | "failed";
-  attempts: number;
-  metadata?: SkillMetadata | null;
-  message: string;
-}
-
-export interface BatchGenerateSkillMetadataResponse {
-  success: boolean;
-  total: number;
-  generated: number;
-  skipped: number;
-  failed: number;
-  results: BatchGenerateSkillMetadataItemResponse[];
   message: string;
 }
 
@@ -117,15 +76,6 @@ export interface CustomSkillContent {
   editable: boolean;
   content: string;
 }
-
-export type BatchProgressCallback = (progress: {
-  completed: number;
-  total: number;
-  currentSkill: string;
-  generated: number;
-  skipped: number;
-  failed: number;
-}) => void;
 
 // ── API helpers ─────────────────────────────────────────────────────────────
 
@@ -187,183 +137,6 @@ export async function batchDeleteSkills(
     throw new SkillRequestError(response.status, await readErrorDetail(response));
   }
   return response.json();
-}
-
-export async function generateSkillMetadata(
-  skillName: string,
-  persist = true,
-): Promise<GenerateSkillMetadataResponse> {
-  let url = `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/metadata/generate`;
-  if (!persist) {
-    url += "?persist=false";
-  }
-  const response = await fetch(url, { method: "POST" });
-  if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
-  }
-  return response.json();
-}
-
-export async function batchSaveSkillMetadata(
-  metadata: Record<string, Record<string, string>>,
-): Promise<void> {
-  const response = await fetch(`${getBackendBaseURL()}/api/skills/metadata/batch-save`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ metadata }),
-  });
-  if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
-  }
-}
-
-const CONCURRENCY = 16;
-
-/**
- * Generate Chinese metadata for many skills in parallel, collecting results
- * and persisting them in a single batch-save at the end (mirrors the harness
- * gallery behaviour).
- */
-export async function batchGenerateSkillMetadata(
-  request: BatchGenerateSkillMetadataRequest,
-  onProgress?: BatchProgressCallback,
-): Promise<BatchGenerateSkillMetadataResponse> {
-  const { skill_names, skip_existing } = request;
-  const allResults: BatchGenerateSkillMetadataItemResponse[] = new Array(
-    skill_names.length,
-  );
-  let totalGenerated = 0;
-  let totalSkipped = 0;
-  let totalFailed = 0;
-  let totalCompleted = 0;
-  const activeSkills = new Set<string>();
-  const pendingMetadata: Record<string, Record<string, string>> = {};
-
-  let existingSet: Set<string> | null = null;
-  if (skip_existing) {
-    try {
-      const currentSkills = await loadSkills();
-      existingSet = new Set(
-        currentSkills.filter((s) => s.display_name).map((s) => s.name),
-      );
-    } catch {
-      existingSet = null;
-    }
-  }
-
-  const emitProgress = () => {
-    const active = [...activeSkills];
-    const display =
-      active.length <= 2
-        ? active.join(", ")
-        : `${active[0]}, ${active[1]} +${active.length - 2}`;
-    onProgress?.({
-      completed: totalCompleted,
-      total: skill_names.length,
-      currentSkill: display,
-      generated: totalGenerated,
-      skipped: totalSkipped,
-      failed: totalFailed,
-    });
-  };
-
-  const processSkill = async (index: number) => {
-    const name = skill_names[index]!;
-
-    if (existingSet?.has(name)) {
-      totalSkipped++;
-      totalCompleted++;
-      allResults[index] = {
-        skill_name: name,
-        status: "skipped",
-        attempts: 0,
-        metadata: null,
-        message: "Skipped because metadata already exists",
-      };
-      emitProgress();
-      return;
-    }
-
-    activeSkills.add(name);
-    emitProgress();
-
-    try {
-      const result = await generateSkillMetadata(name, false);
-      if (result.skipped) {
-        totalSkipped++;
-        allResults[index] = {
-          skill_name: name,
-          status: "skipped",
-          attempts: result.attempts,
-          metadata: result.metadata,
-          message: result.message,
-        };
-      } else {
-        totalGenerated++;
-        allResults[index] = {
-          skill_name: name,
-          status: "generated",
-          attempts: result.attempts,
-          metadata: result.metadata,
-          message: result.message,
-        };
-        if (result.metadata) {
-          pendingMetadata[name] = {
-            display_name: result.metadata.display_name ?? "",
-            description_zh: result.metadata.description_zh ?? "",
-            safety_level: result.metadata.safety_level ?? "",
-            capabilities: result.metadata.capabilities ?? "",
-            recommended_scenarios: result.metadata.recommended_scenarios ?? "",
-          };
-        }
-      }
-    } catch {
-      totalFailed++;
-      allResults[index] = {
-        skill_name: name,
-        status: "failed",
-        attempts: 0,
-        metadata: null,
-        message: "Failed to generate metadata",
-      };
-    }
-
-    activeSkills.delete(name);
-    totalCompleted++;
-    emitProgress();
-  };
-
-  let nextIndex = 0;
-  const runWorker = async () => {
-    while (nextIndex < skill_names.length) {
-      const idx = nextIndex++;
-      await processSkill(idx);
-    }
-  };
-
-  const workers = Array.from(
-    { length: Math.min(CONCURRENCY, skill_names.length) },
-    () => runWorker(),
-  );
-  await Promise.all(workers);
-
-  if (Object.keys(pendingMetadata).length > 0) {
-    try {
-      await batchSaveSkillMetadata(pendingMetadata);
-    } catch (e) {
-      console.error("Failed to batch save metadata:", e);
-    }
-  }
-
-  return {
-    success: totalFailed === 0,
-    total: skill_names.length,
-    generated: totalGenerated,
-    skipped: totalSkipped,
-    failed: totalFailed,
-    results: allResults.filter(Boolean),
-    message: `Metadata generation completed: generated ${totalGenerated}, skipped ${totalSkipped}, failed ${totalFailed}`,
-  };
 }
 
 export async function importSkillPackage(file: File): Promise<InstallSkillResponse> {
@@ -474,36 +247,6 @@ export function useBatchDeleteSkills() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (skillNames: string[]) => batchDeleteSkills(skillNames),
-    onSuccess: () => invalidateSkills(queryClient),
-  });
-}
-
-export function useGenerateSkillMetadata() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (skillName: string) => generateSkillMetadata(skillName),
-    onSuccess: () => invalidateSkills(queryClient),
-  });
-}
-
-export function useBatchGenerateSkillMetadata(
-  onProgress?: BatchProgressCallback,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      skill_names,
-      skip_existing,
-      retries,
-    }: {
-      skill_names: string[];
-      skip_existing?: boolean;
-      retries?: number;
-    }) =>
-      batchGenerateSkillMetadata(
-        { skill_names, skip_existing, retries },
-        onProgress,
-      ),
     onSuccess: () => invalidateSkills(queryClient),
   });
 }

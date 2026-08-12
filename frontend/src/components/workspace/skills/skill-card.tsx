@@ -1,15 +1,18 @@
 "use client";
 
 import {
+  BotIcon,
+  CheckIcon,
   DownloadIcon,
   EyeIcon,
+  LayoutGridIcon,
   LoaderIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PuzzleIcon,
   SettingsIcon,
-  SparklesIcon,
   Trash2Icon,
+  UsersIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -42,7 +45,6 @@ import { useAuth } from "@/core/auth/AuthProvider";
 import { SKILL_CATEGORIES } from "@/core/skills/categories";
 import {
   useDeleteSkill,
-  useGenerateSkillMetadata,
   useUpdateSkillCategory,
 } from "@/core/skills/extended";
 import { exportInstalledSkill } from "@/core/skills/extended";
@@ -79,6 +81,9 @@ const MENU_ITEM_CLASS =
 const MENU_DANGER_ITEM_CLASS =
   "mt-1 rounded-t-none rounded-b-[7px] border-t border-[#f2dede] text-[#e04a52] focus:bg-[#fff3f3] focus:text-[#d9343f] hover:bg-[#fff3f3] hover:text-[#d9343f]";
 
+const CATEGORY_CHIP_CLASS =
+  "h-8 cursor-pointer rounded-[8px] border px-[13px] text-[10px] transition-colors hover:border-[#a9cbe6] hover:text-[#1671c5]";
+
 function scopeLabel(scope: string | undefined): string {
   if (scope === "user") return "自定义";
   if (scope === "legacy") return "旧版";
@@ -102,7 +107,6 @@ export function SkillCard({
   const isAdmin = user?.system_role === "admin";
   const { mutate: enableSkill } = useEnableSkill();
   const deleteSkillMutation = useDeleteSkill();
-  const generateMetadataMutation = useGenerateSkillMetadata();
   const updateCategoryMutation = useUpdateSkillCategory();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
@@ -139,15 +143,6 @@ export function SkillCard({
       await deleteSkillMutation.mutateAsync(skill.name);
       toast.success(`技能「${skill.name}」已删除`);
       setDeleteOpen(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleGenerateMetadata() {
-    try {
-      await generateMetadataMutation.mutateAsync(skill.name);
-      toast.success(`已为「${displayName}」生成中文元数据`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
@@ -363,18 +358,6 @@ export function SkillCard({
                 <>
                   <DropdownMenuItem
                     className={MENU_ITEM_CLASS}
-                    onSelect={handleGenerateMetadata}
-                    disabled={generateMetadataMutation.isPending}
-                  >
-                    {generateMetadataMutation.isPending ? (
-                      <LoaderIcon className="animate-spin" />
-                    ) : (
-                      <SparklesIcon />
-                    )}
-                    生成中文元数据
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className={MENU_ITEM_CLASS}
                     onSelect={() => setCategoryOpen(true)}
                   >
                     <SettingsIcon />
@@ -446,43 +429,123 @@ export function SkillCard({
                   placeholder={skill.name}
                   className="h-[38px] rounded-[9px] border-[#d3e1ee] bg-white px-3 text-sm text-[#1e293b] shadow-none transition focus-visible:border-[#87bdf0] focus-visible:ring-2 focus-visible:ring-[rgba(65,155,255,0.13)] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
-                <label
-                  className="mt-[13px] mb-1.5 block text-[10px] font-semibold text-[#5d7185] dark:text-slate-300"
-                  htmlFor={`skill-category-${skill.name}`}
-                >
-                  技能分类
-                </label>
-                <select
-                  id={`skill-category-${skill.name}`}
-                  value={categoryValue}
-                  onChange={(event) => setCategoryValue(event.target.value)}
-                  className="h-[38px] w-full cursor-pointer rounded-[9px] border border-[#d3e1ee] bg-white px-3 text-sm text-[#1e293b] shadow-none transition focus:border-[#87bdf0] focus:ring-2 focus:ring-[rgba(65,155,255,0.13)] focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                >
-                  {SKILL_CATEGORIES.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-[13px] grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {(
+                    [
+                      {
+                        value: "public",
+                        title: "公共",
+                        desc: "所有人可见",
+                        icon: UsersIcon,
+                      },
+                      {
+                        value: "personal",
+                        title: "个人",
+                        desc: "仅创建者可见",
+                        icon: BotIcon,
+                      },
+                    ] as const
+                  ).map((scope) => {
+                    const Icon = scope.icon;
+                    const active =
+                      scope.value === "public"
+                        ? skill.scope === "public"
+                        : skill.scope !== "public";
+                    return (
+                      <button
+                        key={scope.value}
+                        type="button"
+                        aria-pressed={active}
+                        className={`relative flex cursor-default items-center gap-2.5 rounded-[10px] border p-[11px_13px] text-left transition-colors ${
+                          active
+                            ? "border-[#4ba3f5] bg-[#f2f9ff] shadow-[0_0_0_3px_rgba(65,155,255,0.12)] dark:border-sky-700 dark:bg-sky-950/45"
+                            : "border-[#dfe9f2] bg-[#fbfdff] dark:border-slate-700 dark:bg-slate-950"
+                        }`}
+                      >
+                        <Icon
+                          className={`size-[17px] shrink-0 ${
+                            active
+                              ? "text-[#2582ea] dark:text-sky-300"
+                              : "text-[#6f8ca3] dark:text-slate-500"
+                          }`}
+                        />
+                        <span>
+                          <b className="block text-[11px] font-semibold text-[#3c5a76] dark:text-slate-200">
+                            {scope.title}
+                          </b>
+                          <small className="block text-[8.5px] text-[#8b9bad] dark:text-slate-500">
+                            {scope.desc}
+                          </small>
+                        </span>
+                        <span
+                          className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full bg-[#419bff] text-white transition ${
+                            active
+                              ? "scale-100 opacity-100"
+                              : "scale-75 opacity-0"
+                          }`}
+                        >
+                          <CheckIcon className="size-2.5" />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-3.5 overflow-hidden rounded-[12px] border border-[#e4edf5] bg-white shadow-[0_1px_2px_rgba(15,56,94,0.05)] dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex h-11 items-center gap-2.5 border-b border-[#eef3f8] bg-[linear-gradient(120deg,#fcfeff,#f5f9fd)] px-3.5 dark:border-slate-800 dark:bg-[linear-gradient(120deg,#111827,#172033)]">
+                <LayoutGridIcon className="size-4 text-[#2582ea] dark:text-sky-300" />
+                <b className="text-xs font-semibold text-[#2c4a66] dark:text-slate-200">
+                  类型
+                </b>
+                <span className="ml-auto rounded-full bg-[#e0f7f1] px-2 py-0.5 text-[9px] font-bold text-[#189a80] dark:bg-emerald-950/60 dark:text-emerald-300">
+                  1
+                </span>
+              </div>
+              <div className="p-3.5">
+                <div className="flex flex-wrap gap-2">
+                  {SKILL_CATEGORIES.map((category) => {
+                    const active = categoryValue === category.id;
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        className={`${CATEGORY_CHIP_CLASS} ${
+                          active
+                            ? "border-[#4ba3f5] bg-[#ebf4ff] font-bold text-[#1671c5] shadow-[0_0_0_3px_rgba(65,155,255,0.1)] dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-300"
+                            : "border-[#dfe9f2] bg-[#fbfdff] text-[#5d7185] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
+                        }`}
+                        onClick={() => setCategoryValue(category.id)}
+                      >
+                        {category.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </section>
           </div>
 
-          <footer className="flex items-center justify-end gap-2 border-t border-[#edf2f7] bg-white px-6 py-3.5 dark:border-slate-800 dark:bg-slate-950">
+          <footer className="flex justify-end gap-2 border-t border-[#edf2f7] bg-white px-6 pt-3 pb-[18px] dark:border-slate-800 dark:bg-slate-950">
             <Button
               variant="outline"
-              className="h-9 rounded-[9px] border-[#d3e1ee] bg-white px-4 text-xs text-[#49677f] shadow-none hover:bg-[#f3f8fc] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="h-9 rounded-[10px] border-[#d1dfeb] bg-white px-3.5 text-[11px] font-semibold text-[#52677b] shadow-none hover:border-[#8fbfe8] hover:bg-[#fbfdff] hover:text-[#1471c3] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               onClick={() => setCategoryOpen(false)}
-              disabled={updateCategoryMutation.isPending}
             >
               取消
             </Button>
             <Button
-              className="h-9 rounded-[9px] bg-[linear-gradient(145deg,#2587ea,#419bff)] px-4 text-xs text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] hover:opacity-95"
+              className="h-9 rounded-[10px] bg-[#419bff] px-3.5 text-[11px] font-semibold text-white shadow-[0_7px_16px_rgba(65,155,255,0.2)] hover:bg-[#2582ea]"
               onClick={handleUpdateCategory}
               disabled={updateCategoryMutation.isPending}
             >
-              {updateCategoryMutation.isPending ? "保存中..." : "保存"}
+              {updateCategoryMutation.isPending ? (
+                <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SettingsIcon className="mr-2 h-4 w-4" />
+              )}
+              保存修改
             </Button>
           </footer>
         </DialogContent>

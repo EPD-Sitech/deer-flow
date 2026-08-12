@@ -34,6 +34,7 @@ from app.gateway.routers import (
     runs,
     scheduled_tasks,
     skills,
+    skills_ext,
     suggestions,
     thread_runs,
     threads,
@@ -653,6 +654,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Skills API is mounted at /api/skills
     app.include_router(skills.router)
+    app.include_router(skills_ext.router)
 
     # First-party integrations API is mounted at /api/integrations
     app.include_router(integrations.router)

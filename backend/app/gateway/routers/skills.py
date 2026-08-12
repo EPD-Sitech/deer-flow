@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_config, require_admin_user
 from app.gateway.path_utils import resolve_thread_virtual_path
+from app.gateway.skills_metadata import SKILL_CATEGORY_DEFINITIONS, skill_to_response_dict
 from deerflow.agents.lead_agent.prompt import clear_skills_system_prompt_cache, refresh_skills_system_prompt_cache_async, refresh_user_skills_system_prompt_cache_async
 from deerflow.config.app_config import AppConfig
 from deerflow.config.extensions_config import (
@@ -49,6 +50,18 @@ class SkillResponse(BaseModel):
     category: SkillCategory = Field(..., description="Category of the skill (public, custom, or legacy)")
     enabled: bool = Field(default=True, description="Whether this skill is enabled")
     editable: bool = Field(default=False, description="Whether this skill can be edited/deleted (true only for custom)")
+    # Extended fields (skills gallery migration) — business metadata merged
+    # from the per-user _skill_metadata.json store.
+    skill_category: str | None = Field(None, description="Business category id (customer_insight, ...)")
+    category_label: str | None = Field(None, description="Business category display label")
+    tags: list[str] = Field(default_factory=list, description="Business tags")
+    display_name: str | None = Field(None, description="Chinese display name")
+    description_zh: str | None = Field(None, description="Chinese description")
+    safety_level: str | None = Field(None, description="Generated safety level")
+    capabilities: str | None = Field(None, description="Generated capabilities summary")
+    recommended_scenarios: str | None = Field(None, description="Generated recommended scenarios")
+    scope: str | None = Field(None, description="Scope: public / user / legacy")
+    can_manage: bool = Field(default=False, description="Whether the current user can manage this skill")
 
 
 class SkillsListResponse(BaseModel):
@@ -103,15 +116,8 @@ class SkillRollbackRequest(BaseModel):
 
 
 def _skill_to_response(skill: Skill) -> SkillResponse:
-    """Convert a Skill object to a SkillResponse."""
-    return SkillResponse(
-        name=skill.name,
-        description=skill.description,
-        license=skill.license,
-        category=skill.category,
-        enabled=skill.enabled,
-        editable=skill.category == SkillCategory.CUSTOM,
-    )
+    """Convert a Skill object to a SkillResponse (merging stored business metadata)."""
+    return SkillResponse(**skill_to_response_dict(skill))
 
 
 def _static_scan_http_detail(error: StaticScanBlockedError) -> dict:
@@ -404,6 +410,47 @@ async def rollback_custom_skill(skill_name: str, body: SkillRollbackRequest, req
     except Exception as e:
         logger.error("Failed to roll back custom skill %s: %s", skill_name, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to roll back custom skill: {str(e)}")
+
+
+class SkillCategoryInfo(BaseModel):
+    """Response model for one business skill category with a skill count."""
+
+    id: str
+    label: str
+    count: int
+
+
+class SkillCategoriesResponse(BaseModel):
+    """Response model for the skill category list."""
+
+    categories: list[SkillCategoryInfo]
+
+
+@router.get(
+    "/skills/categories",
+    response_model=SkillCategoriesResponse,
+    summary="List Skill Categories",
+    description="Return configured skill business categories with visible skill counts.",
+)
+async def list_skill_categories(config: AppConfig = Depends(get_config)) -> SkillCategoriesResponse:
+    """Return business categories with counts (registered before ``/skills/{skill_name}`` so the literal segment wins)."""
+    try:
+        skills = _get_user_skill_storage(config).load_skills(enabled_only=False)
+    except Exception as e:
+        logger.error(f"Failed to load skills for categories: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load skills: {str(e)}")
+
+    counts: dict[str, int] = {item["id"]: 0 for item in SKILL_CATEGORY_DEFINITIONS}
+    for skill in skills:
+        category = skill_to_response_dict(skill)["skill_category"]
+        counts[category] = counts.get(category, 0) + 1
+
+    return SkillCategoriesResponse(
+        categories=[
+            SkillCategoryInfo(id=item["id"], label=item["label"], count=counts.get(item["id"], 0))
+            for item in SKILL_CATEGORY_DEFINITIONS
+        ]
+    )
 
 
 @router.get(

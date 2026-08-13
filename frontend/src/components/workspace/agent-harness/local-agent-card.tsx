@@ -6,6 +6,7 @@ import {
   CalendarClockIcon,
   CopyIcon,
   DownloadIcon,
+  EyeIcon,
   FileEditIcon,
   MessageSquareIcon,
   MoreHorizontalIcon,
@@ -100,12 +101,16 @@ export function LocalAgentCard({
     "runtime_name" in agent ? agent.runtime_name : agent.name;
   const [cloneName, setCloneName] = useState(`${runtimeName}-copy`);
   const canManage = !("can_manage" in agent) || agent.can_manage;
+  const canViewDetails =
+    !("can_view_details" in agent) || agent.can_view_details;
+  const canEditGuideQuestions =
+    "can_edit_guide_questions" in agent && agent.can_edit_guide_questions;
   const canEdit = !("can_edit" in agent) || agent.can_edit;
   const canDelete = !("can_delete" in agent) || agent.can_delete;
   const canExport = !("can_export" in agent) || agent.can_export;
   const canClone = !("can_clone" in agent) || agent.can_clone;
   const canShare = !("can_share" in agent) || agent.can_share;
-  const hasActions = canManage || canExport || canClone;
+  const hasActions = canViewDetails || canManage || canExport || canClone;
   const scopeLabel =
     "scope" in agent && agent.scope === "platform"
       ? locale.startsWith("zh")
@@ -133,10 +138,9 @@ export function LocalAgentCard({
         new Set([
           categoryLabel,
           ...(agent.tool_groups ?? []),
-          ...(agent.skills ?? []),
         ]),
       ).slice(0, 3),
-    [agent.skills, agent.tool_groups, categoryLabel],
+    [agent.tool_groups, categoryLabel],
   );
 
   function handleChat() {
@@ -200,10 +204,6 @@ export function LocalAgentCard({
           } as CSSProperties
         }
       >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-8 -bottom-11 size-32 rotate-12 rounded-[28px] border border-[color:var(--local-agent-accent)] opacity-15"
-        />
         <div className="relative h-full p-3.5">
           {onToggleSelect && (
             <input
@@ -293,6 +293,17 @@ export function LocalAgentCard({
                     {locale.startsWith("zh") ? "详情编辑" : "Details & edit"}
                   </DropdownMenuItem>
                 )}
+                {canViewDetails && !canEdit && (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setDetailTab("files");
+                      setDetailOpen(true);
+                    }}
+                  >
+                    <EyeIcon />
+                    {locale.startsWith("zh") ? "查看详情" : "View details"}
+                  </DropdownMenuItem>
+                )}
                 {canManage && (
                   <DropdownMenuItem
                     onSelect={() => {
@@ -380,6 +391,8 @@ export function LocalAgentCard({
           onOpenChange={setDetailOpen}
           initialTab={detailTab}
           scope={scope}
+          readOnly={!canEdit}
+          canEditGuideQuestions={canEditGuideQuestions}
         />
       )}
 

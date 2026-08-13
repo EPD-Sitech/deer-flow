@@ -13,6 +13,7 @@ from deerflow.persistence.agents import get_agent_store, parse_agent_config
 from deerflow.persistence.agents.file import FileAgentStore
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id
 
+from .guide_questions import guide_questions_from_document, read_raw_config
 from .platform_store import PlatformAgentStore
 
 logger = logging.getLogger(__name__)
@@ -26,26 +27,43 @@ class AgentCatalogService:
         self.paths = paths
         self.can_manage_public = can_manage_public
 
-    @staticmethod
     def _item(
+        self,
         config,
         *,
         scope: str,
         can_manage: bool,
         runtime_name: str | None = None,
+        source_store: Any | None = None,
     ) -> dict[str, Any]:
+        owns_agent = scope == "user"
+        guide_questions: list[dict[str, str]] = []
+        try:
+            guide_questions = guide_questions_from_document(
+                read_raw_config(
+                    source_store or self.store,
+                    config.name,
+                    self.user_id,
+                    state_dir=self.paths.user_dir(self.user_id),
+                )
+            )
+        except (FileNotFoundError, ValueError):
+            logger.warning("Failed to load guide questions for Agent '%s'", config.name, exc_info=True)
         return {
             **config.model_dump(exclude_none=True, exclude_unset=True),
             "name": config.name,
             "runtime_name": runtime_name or config.name,
             "scope": scope,
             "can_manage": can_manage,
+            "can_view_details": True,
+            "can_edit_guide_questions": self.can_manage_public,
             "can_edit": can_manage,
             "can_delete": can_manage,
-            "can_export": True,
-            "can_clone": True,
+            "can_export": owns_agent or can_manage,
+            "can_clone": owns_agent or can_manage,
             "can_share": can_manage,
             "can_batch": can_manage,
+            "guide_questions": guide_questions,
         }
 
     def _public_agents(self) -> list:
@@ -81,6 +99,7 @@ class AgentCatalogService:
                     scope="platform",
                     can_manage=self.can_manage_public,
                     runtime_name=platform_store.ensure_runtime_alias(config.name),
+                    source_store=platform_store,
                 )
                 for config in sorted(public, key=lambda item: item.name)
             ),

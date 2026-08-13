@@ -14,6 +14,7 @@ import yaml
 from deerflow.config.agents_config import AgentConfig
 from deerflow.persistence.agents import AgentExistsError
 
+from .guide_questions import read_raw_config, validate_guide_questions
 from .names import MIGRATED_AGENT_NAME_PATTERN, normalize_migrated_agent_name
 
 _AGENT_NAME_RE = MIGRATED_AGENT_NAME_PATTERN
@@ -72,10 +73,11 @@ def _safe_archive_names(archive: zipfile.ZipFile) -> None:
 class AgentManagementService:
     """Backend-neutral management operations layered on DeerFlow's AgentStore."""
 
-    def __init__(self, *, store: Any, user_id: str, state_dir: Path) -> None:
+    def __init__(self, *, store: Any, user_id: str, state_dir: Path, can_edit_guide_questions: bool = True) -> None:
         self.store = store
         self.user_id = user_id
         self.state_dir = Path(state_dir)
+        self.can_edit_guide_questions = can_edit_guide_questions
 
     def _get(self, name: str) -> tuple[str, AgentConfig, str]:
         normalized = normalize_agent_name(name)
@@ -89,10 +91,38 @@ class AgentManagementService:
     def describe(self, name: str) -> dict[str, Any]:
         normalized, config, soul = self._get(name)
         result = _config_document(config, name=normalized)
+        raw = read_raw_config(
+            self.store,
+            normalized,
+            self.user_id,
+            state_dir=self.state_dir,
+        )
+        if "ui" in raw:
+            validate_guide_questions(raw)
+            result["ui"] = {"guide_questions": raw.get("ui", {}).get("guide_questions", [])}
         result["soul"] = soul
         return result
 
-    def update_files(self, name: str, *, config_yaml: str | None = None, soul: str | None = None) -> dict[str, Any]:
+    def _document(self, name: str, config: AgentConfig) -> dict[str, Any]:
+        document = _config_document(config, name=name)
+        raw = read_raw_config(
+            self.store,
+            name,
+            self.user_id,
+            state_dir=self.state_dir,
+        )
+        if "ui" in raw:
+            document["ui"] = {"guide_questions": validate_guide_questions(raw)}
+        return document
+
+    def update_files(
+        self,
+        name: str,
+        *,
+        config_yaml: str | None = None,
+        soul: str | None = None,
+        guide_questions: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
         normalized, current, _ = self._get(name)
         config_document: dict[str, Any] | None = None
         if config_yaml is not None:
@@ -106,6 +136,37 @@ class AgentManagementService:
                 raise ValueError(f"config_yaml name '{config_name}' does not match agent '{normalized}'")
             validated = AgentConfig(**loaded)
             config_document = _config_document(validated, name=normalized)
+            guide_questions = validate_guide_questions(loaded)
+            current_questions = validate_guide_questions(
+                read_raw_config(
+                    self.store,
+                    normalized,
+                    self.user_id,
+                    state_dir=self.state_dir,
+                )
+            )
+            if not self.can_edit_guide_questions and guide_questions != current_questions:
+                raise PermissionError("Only administrators can manage Agent guide questions")
+            if "ui" in loaded:
+                config_document["ui"] = {"guide_questions": guide_questions}
+            elif current_questions:
+                config_document["ui"] = {"guide_questions": current_questions}
+        if guide_questions is not None:
+            requested_questions = validate_guide_questions(
+                {"ui": {"guide_questions": guide_questions}},
+            )
+            current_questions = validate_guide_questions(
+                read_raw_config(
+                    self.store,
+                    normalized,
+                    self.user_id,
+                    state_dir=self.state_dir,
+                )
+            )
+            if not self.can_edit_guide_questions and requested_questions != current_questions:
+                raise PermissionError("Only administrators can manage Agent guide questions")
+            config_document = config_document or self._document(normalized, current)
+            config_document["ui"] = {"guide_questions": requested_questions}
         if soul is not None and not soul.strip():
             raise ValueError("SOUL.md content cannot be empty")
         self.store.update(normalized, config_document, soul, user_id=self.user_id)
@@ -131,7 +192,7 @@ class AgentManagementService:
 
     def export_agent(self, name: str, *, format: Literal["zip", "md"] = "zip") -> AgentArchive:
         normalized, config, soul = self._get(name)
-        document = _config_document(config, name=normalized)
+        document = self._document(normalized, config)
         if format == "md":
             frontmatter = yaml.safe_dump(document, allow_unicode=True, sort_keys=False).rstrip()
             content = f"---\n{frontmatter}\n---\n\n{soul}".encode()
@@ -165,7 +226,10 @@ class AgentManagementService:
                     normalized, config, soul = self._get(requested_name)
                 except (AgentNotFound, ValueError):
                     continue
-                archive.writestr(f"{normalized}/config.yaml", yaml.safe_dump(_config_document(config, name=normalized), allow_unicode=True, sort_keys=False))
+                archive.writestr(
+                    f"{normalized}/config.yaml",
+                    yaml.safe_dump(self._document(normalized, config), allow_unicode=True, sort_keys=False),
+                )
                 archive.writestr(f"{normalized}/SOUL.md", soul)
         return AgentArchive(output.getvalue(), "application/zip", "agents-export.zip")
 
@@ -179,7 +243,8 @@ class AgentManagementService:
     ) -> AgentConfig:
         _, source, soul = self._get(source_name)
         target = normalize_agent_name(target_name)
-        document = _config_document(source, name=target)
+        document = self._document(normalize_agent_name(source_name), source)
+        document["name"] = target
         store = destination_store or self.store
         user_id = destination_user_id or self.user_id
         store.create(target, document, soul, user_id=user_id)
@@ -254,6 +319,11 @@ class AgentManagementService:
                 raw_config["name"] = normalized
                 config = AgentConfig(**raw_config)
                 document = _config_document(config, name=normalized)
+                guide_questions = validate_guide_questions(raw_config)
+                if guide_questions and not self.can_edit_guide_questions:
+                    raise PermissionError("Only administrators can import Agent guide questions")
+                if "ui" in raw_config:
+                    document["ui"] = {"guide_questions": guide_questions}
                 existed = self.store.exists(normalized, user_id=self.user_id)
                 if existed and not overwrite:
                     raise AgentExistsError(normalized)
@@ -302,7 +372,7 @@ class AgentManagementService:
             "version_id": version_id,
             "created_at": timestamp.isoformat(),
             "message": message,
-            "config": _config_document(config, name=normalized),
+            "config": self._document(normalized, config),
             "soul": soul,
         }
         self._write_json(versions_dir / f"{version_id}.json", snapshot)
@@ -325,6 +395,17 @@ class AgentManagementService:
         snapshot = self.get_version(name, version_id)
         if snapshot is None:
             raise AgentNotFound(f"Version '{version_id}' not found")
+        snapshot_questions = validate_guide_questions(snapshot.get("config") or {})
+        current_questions = validate_guide_questions(
+            read_raw_config(
+                self.store,
+                normalize_agent_name(name),
+                self.user_id,
+                state_dir=self.state_dir,
+            ),
+        )
+        if not self.can_edit_guide_questions and snapshot_questions != current_questions:
+            raise PermissionError("Only administrators can manage Agent guide questions")
         self.create_version(name, f"auto-save before restore to {version_id}")
         self.store.update(normalize_agent_name(name), snapshot["config"], snapshot["soul"], user_id=self.user_id)
         return {"restored": True, "version": self._version_summary(snapshot)}

@@ -83,7 +83,7 @@ def test_source_schedule_shapes_map_to_native_scheduler_contract() -> None:
     assert spec == {"cron": "*/15 * * * *"}
 
 
-def test_public_agent_management_requires_admin_but_read_exports_can_opt_out(
+def test_public_agent_management_requires_admin_but_read_details_can_opt_out(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:

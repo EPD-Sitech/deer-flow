@@ -52,6 +52,16 @@ class PlatformAgentStore:
             raise ValueError("config.yaml must contain an object")
         return parse_agent_config(loaded, agent_dir.name)
 
+    def get_raw_config(self, name: str, *, user_id: str | None = None) -> dict[str, Any]:
+        del user_id
+        config_file = self._dir(name) / "config.yaml"
+        if not config_file.is_file():
+            raise FileNotFoundError(name)
+        loaded = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError("config.yaml must contain an object")
+        return loaded
+
     def get_soul(self, name: str, *, user_id: str | None = None) -> str | None:
         del user_id
         soul_file = self._dir(name) / SOUL_FILENAME

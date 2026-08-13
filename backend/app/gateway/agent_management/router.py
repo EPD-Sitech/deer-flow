@@ -53,13 +53,19 @@ AgentScope = Literal["user", "platform"]
 
 def _service(scope: AgentScope = "user", *, require_platform_admin: bool = True) -> AgentManagementService:
     user_id = get_effective_user_id()
+    is_admin = getattr(get_current_user(), "system_role", None) == "admin"
     if scope == "platform":
-        if require_platform_admin and getattr(get_current_user(), "system_role", None) != "admin":
+        if require_platform_admin and not is_admin:
             raise HTTPException(status_code=403, detail="Only administrators can modify public Agents")
         store = PlatformAgentStore(get_paths())
     else:
         store = get_agent_store()
-    return AgentManagementService(store=store, user_id=user_id, state_dir=get_paths().user_dir(user_id))
+    return AgentManagementService(
+        store=store,
+        user_id=user_id,
+        state_dir=get_paths().user_dir(user_id),
+        can_edit_guide_questions=is_admin,
+    )
 
 
 def _agent_response(data: dict[str, Any]) -> AgentResponse:
@@ -73,6 +79,8 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, AgentExistsError):
         return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, PermissionError):
+        return HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, (InvalidAgentArchive, ValueError)):
         return HTTPException(status_code=422, detail=str(exc))
     logger.exception("Local-agent management operation failed")
@@ -101,6 +109,7 @@ class MemoryUpdateRequest(BaseModel):
 class AgentFilesUpdateRequest(BaseModel):
     config_yaml: str | None = None
     soul: str | None = None
+    guide_questions: list[dict[str, str]] | None = None
 
 
 class AgentCloneRequest(BaseModel):
@@ -117,12 +126,16 @@ class AgentNamesRequest(BaseModel):
 async def get_agent_files(name: str, scope: AgentScope = "user") -> dict[str, Any]:
     _require_agents_api_enabled()
     try:
-        data = await asyncio.to_thread(_service(scope).describe, name)
+        data = await asyncio.to_thread(
+            _service(scope, require_platform_admin=False).describe,
+            name,
+        )
         config = {key: value for key, value in data.items() if key != "soul"}
         return {
             "name": data["name"],
             "config_yaml": yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
             "soul": data.get("soul") or "",
+            "guide_questions": data.get("ui", {}).get("guide_questions", []),
         }
     except Exception as exc:
         raise _http_error(exc) from exc
@@ -318,11 +331,18 @@ async def update_agent_memory(name: str, body: MemoryUpdateRequest, scope: Agent
 async def update_agent_files(name: str, body: AgentFilesUpdateRequest, scope: AgentScope = "user") -> dict[str, Any]:
     _require_agents_api_enabled()
     try:
-        data = await asyncio.to_thread(_service(scope).update_files, name, config_yaml=body.config_yaml, soul=body.soul)
+        data = await asyncio.to_thread(
+            _service(scope).update_files,
+            name,
+            config_yaml=body.config_yaml,
+            soul=body.soul,
+            guide_questions=body.guide_questions,
+        )
         config = {key: value for key, value in data.items() if key != "soul"}
         return {
             **data,
             "config_yaml": yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
+            "guide_questions": data.get("ui", {}).get("guide_questions", []),
             "scope": scope,
             "owner_id": get_effective_user_id(),
             "can_manage": True,
@@ -339,7 +359,7 @@ async def export_agent(
 ) -> StreamingResponse:
     _require_agents_api_enabled()
     try:
-        archive = await asyncio.to_thread(_service(scope, require_platform_admin=False).export_agent, name, format=format)
+        archive = await asyncio.to_thread(_service(scope).export_agent, name, format=format)
         return StreamingResponse(io.BytesIO(archive.content), media_type=archive.media_type, headers={"Content-Disposition": _attachment_header(archive.filename)})
     except Exception as exc:
         raise _http_error(exc) from exc
@@ -368,7 +388,7 @@ async def import_agent(file: UploadFile = File(...), name_override: str = Form(d
 async def clone_agent(name: str, body: AgentCloneRequest, scope: AgentScope = "user") -> AgentResponse:
     _require_agents_api_enabled()
     try:
-        source_service = _service(scope, require_platform_admin=False)
+        source_service = _service(scope)
         await asyncio.to_thread(
             source_service.clone_agent,
             name,

@@ -37,6 +37,13 @@ class MemoryAgentStore:
             raise FileNotFoundError(name) from exc
         return AgentConfig(**config)
 
+    def get_raw_config(self, name: str, *, user_id: str | None = None) -> dict:
+        try:
+            config, _ = self.records[self._key(name, user_id)]
+        except KeyError as exc:
+            raise FileNotFoundError(name) from exc
+        return dict(config)
+
     def get_soul(self, name: str, *, user_id: str | None = None) -> str | None:
         try:
             _, soul = self.records[self._key(name, user_id)]
@@ -145,6 +152,92 @@ def test_describe_exposes_complete_editable_agent_document(service: AgentManagem
     assert details["soul"].startswith("# Identity")
 
 
+def test_admin_can_manage_and_preserve_guide_questions(service: AgentManagementService) -> None:
+    config = yaml.safe_dump(
+        {
+            "name": "writer",
+            "description": "Writes concise reports",
+            "skills": ["research"],
+            "ui": {
+                "guide_questions": [
+                    {"question": "帮我写报告", "prompt": "请根据以下材料写报告"},
+                    {"question": "总结重点"},
+                ]
+            },
+        },
+        allow_unicode=True,
+    )
+
+    updated = service.update_files("writer", config_yaml=config)
+
+    assert updated["ui"]["guide_questions"][0]["question"] == "帮我写报告"
+    exported = service.export_agent("writer")
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        exported_config = yaml.safe_load(archive.read("config.yaml"))
+    assert exported_config["ui"] == updated["ui"]
+
+
+def test_non_admin_cannot_change_guide_questions(service: AgentManagementService) -> None:
+    service.can_edit_guide_questions = False
+    config = yaml.safe_dump(
+        {
+            "name": "writer",
+            "description": "Writes concise reports",
+            "ui": {"guide_questions": [{"question": "受限问题"}]},
+        },
+        allow_unicode=True,
+    )
+
+    with pytest.raises(PermissionError, match="Only administrators"):
+        service.update_files("writer", config_yaml=config)
+
+
+def test_non_admin_cannot_restore_guide_question_changes(service: AgentManagementService) -> None:
+    config = yaml.safe_dump(
+        {
+            "name": "writer",
+            "description": "Writes concise reports",
+            "ui": {"guide_questions": [{"question": "管理员问题"}]},
+        },
+        allow_unicode=True,
+    )
+    service.update_files("writer", config_yaml=config)
+    version = service.create_version("writer", "guide questions")
+    service.update_files(
+        "writer",
+        config_yaml=("name: writer\ndescription: Writes concise reports\nui:\n  guide_questions: []\n"),
+    )
+    service.can_edit_guide_questions = False
+
+    with pytest.raises(PermissionError, match="Only administrators"):
+        service.restore_version("writer", version["version_id"])
+
+
+@pytest.mark.parametrize(
+    "guide_questions, message",
+    [
+        ([{"question": ""}], "缺少问题文案"),
+        ([{"question": "问题"}] * 7, "最多配置 6 条"),
+    ],
+)
+def test_guide_question_validation(
+    service: AgentManagementService,
+    guide_questions: list[dict],
+    message: str,
+) -> None:
+    config = yaml.safe_dump(
+        {
+            "name": "writer",
+            "description": "Writes concise reports",
+            "ui": {"guide_questions": guide_questions},
+        },
+        allow_unicode=True,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        service.update_files("writer", config_yaml=config)
+
+
 def test_public_sharing_is_explicit_and_resolves_alias(service: AgentManagementService, tmp_path: Path) -> None:
     registry = AgentShareRegistry(store=service.store, state_file=tmp_path / "public-agent-shares.json")
 
@@ -152,11 +245,26 @@ def test_public_sharing_is_explicit_and_resolves_alias(service: AgentManagementS
 
     share = registry.update("alice", "writer", enabled=True, public_slug="report-writer")
     assert share["public_name"] == "report-writer"
+    assert share["public_path"] == "/public/agent/report-writer"
 
     resolved = registry.resolve("report-writer")
     assert resolved is not None
     assert resolved["config"].name == "writer"
     assert resolved["soul"].startswith("# Identity")
+
+
+def test_public_resolve_skips_stale_duplicate_before_valid_share(
+    service: AgentManagementService,
+    tmp_path: Path,
+) -> None:
+    state_file = tmp_path / "public-agent-shares.json"
+    registry = AgentShareRegistry(store=service.store, state_file=state_file)
+    state_file.write_text('{"version": 1, "shares": [{"owner_id": "missing", "agent_name": "writer", "enabled": true, "public_slug": "reports"},{"owner_id": "alice", "agent_name": "writer", "enabled": true, "public_slug": "reports"}]}')
+
+    resolved = registry.resolve("reports")
+
+    assert resolved is not None
+    assert resolved["owner_id"] == "alice"
 
     registry.update("alice", "writer", enabled=False)
     assert registry.resolve("report-writer") is None
@@ -181,7 +289,13 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
     public_dir = paths.agent_dir("public-researcher")
     public_dir.mkdir(parents=True)
     (public_dir / "config.yaml").write_text(
-        yaml.safe_dump({"name": "public-researcher", "description": "Shared research Agent"}),
+        yaml.safe_dump(
+            {
+                "name": "public-researcher",
+                "description": "Shared research Agent",
+                "ui": {"guide_questions": [{"question": "研究这份报告"}]},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -191,14 +305,20 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
         ("writer", "user", True),
         ("public-researcher", "platform", False),
     ]
-    assert catalog[1]["can_export"] is True
-    assert catalog[1]["can_clone"] is True
+    assert catalog[1]["can_view_details"] is True
+    assert catalog[1]["can_edit_guide_questions"] is False
+    assert catalog[1]["can_export"] is False
+    assert catalog[1]["can_clone"] is False
     assert catalog[1]["can_share"] is False
     assert catalog[1]["can_batch"] is False
     assert catalog[1]["runtime_name"] == "public-researcher"
+    assert catalog[1]["guide_questions"] == [{"question": "研究这份报告"}]
 
     admin_catalog = AgentCatalogService(store=service.store, user_id="alice", paths=paths, can_manage_public=True).list_agents()
     assert admin_catalog[1]["can_manage"] is True
+    assert admin_catalog[1]["can_edit_guide_questions"] is True
+    assert admin_catalog[1]["can_export"] is True
+    assert admin_catalog[1]["can_clone"] is True
     assert admin_catalog[1]["can_share"] is True
     assert admin_catalog[1]["can_batch"] is True
 

@@ -10,10 +10,15 @@ import {
   FileCode2Icon,
   HistoryIcon,
   Loader2Icon,
+  MessageCircleQuestionIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
   PackageIcon,
   PlayIcon,
+  PlusIcon,
   RotateCcwIcon,
   SaveIcon,
+  Trash2Icon,
   UploadIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -57,6 +62,11 @@ import {
   type AgentScope,
   type ValidationResult,
 } from "./agent-management-api";
+import {
+  MAX_AGENT_GUIDE_QUESTIONS,
+  validateAgentGuideQuestions,
+  type AgentGuideQuestion,
+} from "./guide-questions";
 import { LocalAgentSchedulePanel } from "./local-agent-schedule-panel";
 
 interface LocalAgentDetailDialogProps {
@@ -65,10 +75,13 @@ interface LocalAgentDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   initialTab?: DetailTab;
   scope?: AgentScope;
+  readOnly?: boolean;
+  canEditGuideQuestions?: boolean;
 }
 
 type DetailTab =
   | "files"
+  | "guideQuestions"
   | "memory"
   | "versions"
   | "debug"
@@ -90,6 +103,8 @@ export function LocalAgentDetailDialog({
   onOpenChange,
   initialTab = "files",
   scope = "user",
+  readOnly = false,
+  canEditGuideQuestions = false,
 }: LocalAgentDetailDialogProps) {
   const { locale } = useI18n();
   const queryClient = useQueryClient();
@@ -101,6 +116,10 @@ export function LocalAgentDetailDialog({
   const [filesLoading, setFilesLoading] = useState(false);
   const [savingFiles, setSavingFiles] = useState(false);
   const [filesDirty, setFilesDirty] = useState(false);
+  const [guideQuestions, setGuideQuestionsState] = useState<
+    Array<AgentGuideQuestion & { id: string }>
+  >([]);
+  const [guideConfigError, setGuideConfigError] = useState<string | null>(null);
 
   const [memoryJson, setMemoryJson] = useState("");
   const [memoryLoading, setMemoryLoading] = useState(false);
@@ -133,6 +152,13 @@ export function LocalAgentDetailDialog({
       const result = await getAgentFiles(agent.name, scope);
       setFiles(result);
       setConfigYaml(result.config_yaml);
+      setGuideQuestionsState(
+        (result.guide_questions ?? []).map((item) => ({
+          ...item,
+          id: crypto.randomUUID(),
+        })),
+      );
+      setGuideConfigError(null);
       setSoul(result.soul);
       setFilesDirty(false);
     } catch (error) {
@@ -201,6 +227,8 @@ export function LocalAgentDetailDialog({
   async function handleSaveFiles() {
     setSavingFiles(true);
     try {
+      const questionError = validateAgentGuideQuestions(guideQuestions);
+      if (questionError) throw new Error(questionError);
       await createAgentVersion(
         agent.name,
         zh ? "详情编辑前自动快照" : "Snapshot before detail edit",
@@ -211,6 +239,9 @@ export function LocalAgentDetailDialog({
         {
           config_yaml: configYaml,
           soul,
+          guide_questions: canEditGuideQuestions
+            ? guideQuestions.map(({ id: _id, ...question }) => question)
+            : undefined,
         },
         scope,
       );
@@ -225,6 +256,13 @@ export function LocalAgentDetailDialog({
     } finally {
       setSavingFiles(false);
     }
+  }
+
+  function syncGuideQuestions(
+    next: Array<AgentGuideQuestion & { id: string }>,
+  ) {
+    setGuideQuestionsState(next);
+    if (canEditGuideQuestions) setFilesDirty(true);
   }
 
   async function handleSaveMemory() {
@@ -335,6 +373,11 @@ export function LocalAgentDetailDialog({
       label: zh ? "配置与角色" : "Config & soul",
       icon: FileCode2Icon,
     },
+    {
+      value: "guideQuestions",
+      label: zh ? "引导问题" : "Guide questions",
+      icon: MessageCircleQuestionIcon,
+    },
     { value: "memory", label: zh ? "记忆" : "Memory", icon: BrainIcon },
     { value: "versions", label: zh ? "版本" : "Versions", icon: HistoryIcon },
     { value: "debug", label: zh ? "调试" : "Debug", icon: BugIcon },
@@ -354,6 +397,7 @@ export function LocalAgentDetailDialog({
       icon: CalendarClockIcon,
     },
   ] as const;
+  const visibleTabs = readOnly ? tabs.slice(0, 2) : tabs;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -367,11 +411,17 @@ export function LocalAgentDetailDialog({
               <DialogDescription className="mt-1 truncate">
                 {agent.description ||
                   (zh
-                    ? "管理本地智能体的完整配置和运行能力。"
-                    : "Manage the local agent configuration and runtime features.")}
+                    ? readOnly
+                      ? "查看智能体配置与角色说明。"
+                      : "管理本地智能体的完整配置和运行能力。"
+                    : readOnly
+                      ? "View the agent configuration and role definition."
+                      : "Manage the local agent configuration and runtime features.")}
               </DialogDescription>
             </div>
-            {tab === "files" && filesDirty && (
+            {!readOnly &&
+              (tab === "files" || tab === "guideQuestions") &&
+              filesDirty && (
               <Button
                 onClick={() => void handleSaveFiles()}
                 disabled={savingFiles}
@@ -394,7 +444,7 @@ export function LocalAgentDetailDialog({
         >
           <div className="shrink-0 overflow-x-auto border-b px-4 [scrollbar-width:none]">
             <TabsList variant="line" className="h-11 w-max">
-              {tabs.map(({ value, label, icon: Icon }) => (
+              {visibleTabs.map(({ value, label, icon: Icon }) => (
                 <TabsTrigger
                   key={value}
                   value={value}
@@ -423,6 +473,7 @@ export function LocalAgentDetailDialog({
                           : "Full agent configuration. The name must match this agent."
                       }
                       value={configYaml}
+                      readOnly={readOnly}
                       onChange={(value) => {
                         setConfigYaml(value);
                         setFilesDirty(true);
@@ -437,11 +488,187 @@ export function LocalAgentDetailDialog({
                           : "The agent's role, behavior, and working style."
                       }
                       value={soul}
+                      readOnly={readOnly}
                       onChange={(value) => {
                         setSoul(value);
                         setFilesDirty(true);
                       }}
                     />
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="guideQuestions" className="m-0 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <SectionHeading
+                    title={zh ? "新会话引导问题" : "New chat guide questions"}
+                    description={
+                      zh
+                        ? canEditGuideQuestions
+                          ? "配置新会话中展示的快捷问题，最多 6 条。"
+                          : "仅管理员可以修改引导问题。"
+                        : canEditGuideQuestions
+                          ? "Configure up to six starter questions for new chats."
+                          : "Only administrators can modify guide questions."
+                    }
+                  />
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-muted-foreground text-xs">
+                      {guideQuestions.length}/{MAX_AGENT_GUIDE_QUESTIONS}
+                    </span>
+                    {canEditGuideQuestions && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          !!guideConfigError ||
+                          guideQuestions.length >= MAX_AGENT_GUIDE_QUESTIONS
+                        }
+                        onClick={() =>
+                          syncGuideQuestions([
+                            ...guideQuestions,
+                            {
+                              id: crypto.randomUUID(),
+                              question: "",
+                              prompt: "",
+                            },
+                          ])
+                        }
+                      >
+                        <PlusIcon className="size-4" />
+                        {zh ? "新增" : "Add"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {guideConfigError ? (
+                  <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-md border px-3 py-2 text-sm">
+                    {guideConfigError}
+                  </div>
+                ) : filesLoading ? (
+                  <LoadingState />
+                ) : guideQuestions.length === 0 ? (
+                  <EmptyState
+                    text={zh ? "暂无引导问题" : "No guide questions"}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {guideQuestions.map((item, index) => (
+                      <div key={item.id} className="rounded-lg border p-3">
+                        <div className="flex items-start gap-3">
+                          <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold">
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium">
+                                {zh ? "问题文案" : "Question"}
+                              </label>
+                              <Input
+                                value={item.question}
+                                readOnly={!canEditGuideQuestions}
+                                placeholder={
+                                  zh
+                                    ? "例如：帮我分析这份材料"
+                                    : "For example: Analyze this material"
+                                }
+                                onChange={(event) =>
+                                  syncGuideQuestions(
+                                    guideQuestions.map((question) =>
+                                      question.id === item.id
+                                        ? {
+                                            ...question,
+                                            question: event.target.value,
+                                          }
+                                        : question,
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium">
+                                {zh ? "发送内容" : "Prompt"}
+                              </label>
+                              <Textarea
+                                value={item.prompt ?? ""}
+                                readOnly={!canEditGuideQuestions}
+                                className="min-h-20"
+                                placeholder={
+                                  zh
+                                    ? "留空时发送问题文案"
+                                    : "Leave empty to send the question"
+                                }
+                                onChange={(event) =>
+                                  syncGuideQuestions(
+                                    guideQuestions.map((question) =>
+                                      question.id === item.id
+                                        ? {
+                                            ...question,
+                                            prompt: event.target.value,
+                                          }
+                                        : question,
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                          {canEditGuideQuestions && (
+                            <div className="flex shrink-0 flex-col gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title={zh ? "上移" : "Move up"}
+                                disabled={index === 0}
+                                onClick={() => {
+                                  const next = [...guideQuestions];
+                                  [next[index - 1], next[index]] = [
+                                    next[index]!,
+                                    next[index - 1]!,
+                                  ];
+                                  syncGuideQuestions(next);
+                                }}
+                              >
+                                <ArrowUpIcon className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title={zh ? "下移" : "Move down"}
+                                disabled={index === guideQuestions.length - 1}
+                                onClick={() => {
+                                  const next = [...guideQuestions];
+                                  [next[index], next[index + 1]] = [
+                                    next[index + 1]!,
+                                    next[index]!,
+                                  ];
+                                  syncGuideQuestions(next);
+                                }}
+                              >
+                                <ArrowDownIcon className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive"
+                                title={zh ? "删除" : "Delete"}
+                                onClick={() =>
+                                  syncGuideQuestions(
+                                    guideQuestions.filter(
+                                      (question) => question.id !== item.id,
+                                    ),
+                                  )
+                                }
+                              >
+                                <Trash2Icon className="size-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </TabsContent>
@@ -794,12 +1021,14 @@ function EditorField({
   description,
   value,
   onChange,
+  readOnly = false,
 }: {
   id: string;
   label: string;
   description: string;
   value: string;
   onChange: (value: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="min-w-0 space-y-2">
@@ -812,8 +1041,9 @@ function EditorField({
       <Textarea
         id={id}
         value={value}
+        readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-[470px] resize-y font-mono text-xs leading-5"
+        className={`min-h-[470px] font-mono text-xs leading-5 ${readOnly ? "resize-none bg-muted/20" : "resize-y"}`}
         spellCheck={false}
       />
     </div>

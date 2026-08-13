@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { BotIcon, PlusSquare } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -7,6 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { listAgentCatalog } from "@/components/workspace/agent-harness/agent-management-api";
+import { LocalAgentGuideQuestions } from "@/components/workspace/agent-harness/local-agent-guide-questions";
 import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { BrowserTrigger } from "@/components/workspace/browser-view";
@@ -67,6 +70,19 @@ export default function AgentChatPage() {
   }>();
 
   const { agent } = useAgent(agent_name);
+  const { data: localAgentCatalog = [], isPending: isCatalogPending } =
+    useQuery({
+      queryKey: ["agents", "catalog"],
+      queryFn: listAgentCatalog,
+      staleTime: 30_000,
+    });
+  const guideQuestions = useMemo(
+    () =>
+      localAgentCatalog.find(
+        (candidate) => candidate.runtime_name === agent_name,
+      )?.guide_questions ?? [],
+    [agent_name, localAgentCatalog],
+  );
 
   const { threadId, setThreadId, isNewThread, setIsNewThread, isMock } =
     useThreadChat();
@@ -391,44 +407,64 @@ export default function AgentChatPage() {
                     </div>
                   )}
 
-                  <InputBox
-                    className={cn(
-                      "bg-background/5 w-full",
-                      isWelcomeMode && "-translate-y-2 sm:-translate-y-4",
+                  {isWelcomeMode && isCatalogPending ? (
+                    <div
+                      aria-hidden="true"
+                      className="bg-background/5 h-32 w-full -translate-y-2 rounded-2xl sm:-translate-y-4"
+                    />
+                  ) : (
+                    <InputBox
+                      className={cn(
+                        "bg-background/5 w-full",
+                        isWelcomeMode && "-translate-y-2 sm:-translate-y-4",
+                      )}
+                      isWelcomeMode={isWelcomeMode}
+                      threadId={threadId}
+                      draftThreadId={isNewThread ? "new" : threadId}
+                      draftAgentName={agent_name}
+                      defaultModelName={agent?.model}
+                      autoFocus={isWelcomeMode}
+                      status={
+                        thread.error
+                          ? "error"
+                          : thread.isLoading
+                            ? "streaming"
+                            : "ready"
+                      }
+                      context={settings.context}
+                      extraHeader={
+                        isWelcomeMode &&
+                        !hasGoal &&
+                        !hasTodos && (
+                          <AgentWelcome agent={agent} agentName={agent_name} />
+                        )
+                      }
+                      disabled={
+                        env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
+                        isUploading ||
+                        (!isNewThread && isHistoryLoading)
+                      }
+                      onContextChange={(context) =>
+                        setSettings("context", context)
+                      }
+                      onGoalChange={setLocalGoal}
+                      onSubmit={handleSubmit}
+                      onStop={handleStop}
+                    />
+                  )}
+                  {isWelcomeMode &&
+                    !isCatalogPending &&
+                    !hasGoal &&
+                    !hasTodos && (
+                      <LocalAgentGuideQuestions
+                        className="absolute top-full right-0 left-0"
+                        questions={guideQuestions}
+                        onSubmit={(prompt) => {
+                          setIsWelcomeMode(false);
+                          void handleSubmit({ text: prompt, files: [] });
+                        }}
+                      />
                     )}
-                    isWelcomeMode={isWelcomeMode}
-                    threadId={threadId}
-                    draftThreadId={isNewThread ? "new" : threadId}
-                    draftAgentName={agent_name}
-                    defaultModelName={agent?.model}
-                    autoFocus={isWelcomeMode}
-                    status={
-                      thread.error
-                        ? "error"
-                        : thread.isLoading
-                          ? "streaming"
-                          : "ready"
-                    }
-                    context={settings.context}
-                    extraHeader={
-                      isWelcomeMode &&
-                      !hasGoal &&
-                      !hasTodos && (
-                        <AgentWelcome agent={agent} agentName={agent_name} />
-                      )
-                    }
-                    disabled={
-                      env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
-                      isUploading ||
-                      (!isNewThread && isHistoryLoading)
-                    }
-                    onContextChange={(context) =>
-                      setSettings("context", context)
-                    }
-                    onGoalChange={setLocalGoal}
-                    onSubmit={handleSubmit}
-                    onStop={handleStop}
-                  />
                   {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" && (
                     <div className="text-muted-foreground/67 w-full translate-y-12 text-center text-xs">
                       {t.common.notAvailableInDemoMode}

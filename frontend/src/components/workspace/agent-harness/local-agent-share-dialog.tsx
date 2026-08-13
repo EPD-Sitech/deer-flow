@@ -31,8 +31,6 @@ interface LocalAgentShareDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PUBLIC_AGENT_ORIGIN = "https://fintech.teamshub.com";
-
 export function LocalAgentShareDialog({
   agentName,
   scope = "user",
@@ -69,8 +67,10 @@ export function LocalAgentShareDialog({
 
   const requestedSlug = slug.trim();
   const publicName = requestedSlug.length > 0 ? requestedSlug : (share?.public_name ?? agentName);
-  const publicPath = `/agent/${encodeURIComponent(publicName)}`;
-  const publicUrl = `${PUBLIC_AGENT_ORIGIN}${publicPath}`;
+  const publicPath = `/public/agent/${encodeURIComponent(publicName)}`;
+  const publicOrigin =
+    typeof window === "undefined" ? "" : window.location.origin;
+  const publicUrl = `${publicOrigin}${publicPath}`;
 
   async function save(enabled = share?.enabled ?? false) {
     setSaving(true);

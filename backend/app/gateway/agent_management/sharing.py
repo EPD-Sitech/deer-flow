@@ -88,7 +88,7 @@ class AgentShareRegistry:
             "enabled": enabled,
             "public_slug": public_slug or None,
             "public_name": public_name,
-            "public_path": f"/agent/{public_name}",
+            "public_path": f"/public/agent/{public_name}",
         }
 
     def get(
@@ -187,10 +187,15 @@ class AgentShareRegistry:
                         entry.get("scope", "user"),
                     )
                 except (AgentNotFound, ValueError):
-                    return None
+                    # A stale share entry must not shadow a valid entry with the
+                    # same public name. Keep scanning the registry so a renamed
+                    # or deleted Agent does not produce a false 404.
+                    continue
                 return {
                     "config": config,
                     "soul": soul,
                     "public_name": public_slug or default_public_name(agent_name),
+                    "scope": entry.get("scope", "user"),
+                    "owner_id": str(entry.get("owner_id") or ""),
                 }
         return None

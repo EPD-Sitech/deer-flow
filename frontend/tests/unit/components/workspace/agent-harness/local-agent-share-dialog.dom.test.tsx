@@ -34,13 +34,13 @@ beforeEach(() => {
     enabled: false,
     public_slug: null,
     public_name: "report-agent",
-    public_path: "/agent/report-agent",
+    public_path: "/public/agent/report-agent",
   });
   apiMocks.updateAgentShare.mockResolvedValue({
     enabled: true,
     public_slug: null,
     public_name: "report-agent",
-    public_path: "/agent/report-agent",
+    public_path: "/public/agent/report-agent",
   });
 });
 
@@ -58,7 +58,9 @@ describe("LocalAgentShareDialog", () => {
 
     expect(await screen.findByText("公开链接当前未启用")).toBeTruthy();
     expect(
-      screen.getByText("https://fintech.teamshub.com/agent/report-agent"),
+      screen.getByText(
+        `${window.location.origin}/public/agent/report-agent`,
+      ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "公开访问" }));
 

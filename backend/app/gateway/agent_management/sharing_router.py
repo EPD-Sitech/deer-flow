@@ -16,6 +16,7 @@ from deerflow.models.factory import create_chat_model
 from deerflow.persistence.agents import get_agent_store
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id
 
+from .guide_questions import guide_questions_from_document, read_raw_config
 from .platform_store import PlatformAgentStore
 from .service import AgentNotFound
 from .sharing import AgentShareRegistry, ShareConflict
@@ -110,12 +111,22 @@ async def get_public_agent(public_name: str) -> dict:
     _require_agents_api_enabled()
     resolved = await asyncio.to_thread(_resolve_or_404, public_name)
     config = resolved["config"]
+    registry = _registry()
+    store = registry.platform_store if resolved.get("scope") == "platform" else registry.store
+    guide_questions = []
+    try:
+        guide_questions = guide_questions_from_document(
+            read_raw_config(store, config.name, resolved.get("owner_id")),
+        )
+    except (FileNotFoundError, ValueError):
+        pass
     return {
         "name": config.name,
         "public_name": resolved["public_name"],
         "description": config.description,
         "tool_groups": config.tool_groups,
         "skills": config.skills,
+        "guide_questions": guide_questions,
     }
 
 

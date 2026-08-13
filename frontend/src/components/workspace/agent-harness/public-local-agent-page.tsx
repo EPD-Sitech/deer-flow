@@ -6,7 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import { ClipboardSafeStreamdown } from "@/components/ai-elements/streamdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { getBackendBaseURL } from "@/core/config";
+import { cn } from "@/lib/utils";
+
+import { LocalAgentGuideQuestions } from "./local-agent-guide-questions";
 
 interface PublicAgentInfo {
   name: string;
@@ -14,6 +18,7 @@ interface PublicAgentInfo {
   description: string;
   tool_groups: string[] | null;
   skills: string[] | null;
+  guide_questions?: Array<{ question: string; prompt?: string }>;
 }
 
 interface ChatMessage {
@@ -64,8 +69,8 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function sendMessage() {
-    const message = draft.trim();
+  async function sendMessage(guidePrompt?: string) {
+    const message = (guidePrompt ?? draft).trim();
     if (!message || sending) return;
     const history = messages;
     setMessages((current) => [
@@ -152,56 +157,31 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
     );
   }
 
-  const tags = [...(agent.tool_groups ?? []), ...(agent.skills ?? [])].slice(
-    0,
-    5,
-  );
+  const isWelcomeMode = messages.length === 0;
 
   return (
-    <main className="bg-background flex min-h-screen flex-col">
-      <header className="bg-card border-b px-4 py-3 sm:px-6">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
-            <BotIcon className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold">{agent.name}</h1>
-            <p className="text-muted-foreground truncate text-xs">
-              {agent.description || "智能体公开对话"}
-            </p>
-          </div>
-          <span className="text-muted-foreground hidden text-xs sm:block">
-            DeerFlow
+    <main className="bg-background relative flex min-h-screen flex-col overflow-hidden">
+      <header
+        className={cn(
+          "absolute top-0 right-0 left-0 z-30 flex h-12 items-center gap-2 px-2 sm:px-4",
+          isWelcomeMode
+            ? "bg-background/0"
+            : "bg-background/80 shadow-xs backdrop-blur",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1">
+          <BotIcon className="text-primary size-3.5" />
+          <span className="max-w-64 truncate text-xs font-medium">
+            {agent.name}
           </span>
         </div>
       </header>
 
-      <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 sm:px-6">
-        <div className="flex-1 space-y-5 overflow-y-auto py-6">
-          {messages.length === 0 ? (
-            <div className="flex min-h-72 flex-col items-center justify-center text-center">
-              <div className="flex size-16 items-center justify-center rounded-full border bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
-                <BotIcon className="size-8" />
-              </div>
-              <h2 className="mt-4 text-lg font-semibold">{agent.name}</h2>
-              <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
-                {agent.description || "请输入你的问题开始对话。"}
-              </p>
-              {tags.length > 0 && (
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="bg-muted rounded-md px-2 py-1 text-xs"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            messages.map((item, index) => (
+      <section className="flex min-h-0 flex-1 flex-col pt-12">
+        {!isWelcomeMode && (
+          <div className="mx-auto flex min-h-0 w-full max-w-(--container-width-md) flex-1 flex-col overflow-y-auto px-4 pt-6 pb-8">
+            <div className="space-y-5">
+              {messages.map((item, index) => (
               <div
                 key={`${item.role}-${index}`}
                 className={
@@ -213,7 +193,7 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
                 <div
                   className={
                     item.role === "user"
-                      ? "max-w-[85%] rounded-lg bg-sky-600 px-4 py-2.5 text-sm text-white"
+                      ? "bg-muted max-w-[85%] rounded-2xl px-4 py-2.5 text-sm"
                       : "max-w-[90%] text-sm leading-7"
                   }
                 >
@@ -230,40 +210,85 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
                   )}
                 </div>
               </div>
-            ))
-          )}
-          <div ref={bottomRef} />
-        </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+        )}
 
-        <div className="bg-background sticky bottom-0 border-t py-4">
-          {error && <p className="text-destructive mb-2 text-xs">{error}</p>}
-          <div className="bg-card flex items-end gap-2 rounded-lg border p-2 shadow-sm">
-            <Textarea
-              value={draft}
-              rows={1}
-              maxLength={20_000}
-              placeholder="发送消息"
-              className="max-h-36 min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void sendMessage();
-                }
-              }}
-            />
-            <Button
-              size="icon"
-              title="发送"
-              disabled={sending || !draft.trim()}
-              onClick={() => void sendMessage()}
-            >
-              {sending ? (
-                <Loader2Icon className="size-4 animate-spin" />
-              ) : (
-                <ArrowUpIcon className="size-4" />
-              )}
-            </Button>
+        <div
+          className={cn(
+            "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
+            isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+          )}
+        >
+          <div
+            className={cn(
+              "relative w-full",
+              isWelcomeMode &&
+                "-translate-y-[calc(50vh-48px)] sm:-translate-y-[calc(50vh-96px)]",
+              isWelcomeMode
+                ? "max-w-(--container-width-sm)"
+                : "max-w-(--container-width-md)",
+            )}
+          >
+            {isWelcomeMode && (
+              <AgentWelcome
+                className="absolute right-0 bottom-full left-0"
+                agent={{
+                  name: agent.name,
+                  description: agent.description,
+                  model: null,
+                  tool_groups: agent.tool_groups,
+                  skills: null,
+                }}
+                agentName={agent.name}
+              />
+            )}
+            {error && (
+              <p className="text-destructive mb-2 px-3 text-xs">{error}</p>
+            )}
+            <div className="bg-background/85 border-input/50 relative z-10 rounded-2xl border shadow-xs backdrop-blur-sm">
+              <Textarea
+                value={draft}
+                rows={1}
+                maxLength={20_000}
+                autoFocus={isWelcomeMode}
+                placeholder="发送消息"
+                className="max-h-48 min-h-16 resize-none rounded-2xl border-0 bg-transparent px-3 py-3 shadow-none focus-visible:ring-0"
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendMessage();
+                  }
+                }}
+              />
+              <div className="flex min-h-11 items-center justify-end px-3 pb-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="rounded-full"
+                  title="发送"
+                  disabled={sending || !draft.trim()}
+                  onClick={() => void sendMessage()}
+                >
+                  {sending ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    <ArrowUpIcon className="size-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            {isWelcomeMode && (
+              <LocalAgentGuideQuestions
+                className="absolute top-full right-0 left-0"
+                questions={agent.guide_questions ?? []}
+                disabled={sending}
+                onSubmit={(prompt) => void sendMessage(prompt)}
+              />
+            )}
           </div>
         </div>
       </section>

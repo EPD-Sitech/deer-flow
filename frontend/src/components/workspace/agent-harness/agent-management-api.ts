@@ -6,6 +6,7 @@ export interface AgentFiles {
   name: string;
   config_yaml: string;
   soul: string;
+  guide_questions?: Array<{ question: string; prompt?: string }>;
 }
 
 export interface AgentVersion {
@@ -92,12 +93,15 @@ export interface LocalAgentCatalogItem extends Agent {
   scope: "platform" | "user";
   runtime_name: string;
   can_manage: boolean;
+  can_view_details: boolean;
+  can_edit_guide_questions: boolean;
   can_edit: boolean;
   can_delete: boolean;
   can_export: boolean;
   can_clone: boolean;
   can_share: boolean;
   can_batch: boolean;
+  guide_questions: Array<{ question: string; prompt?: string }>;
 }
 
 export type AgentScope = LocalAgentCatalogItem["scope"];
@@ -151,7 +155,11 @@ export async function listAgentCatalog() {
 
 export function updateAgentFiles(
   name: string,
-  files: { config_yaml: string; soul: string },
+  files: {
+    config_yaml: string;
+    soul: string;
+    guide_questions?: Array<{ question: string; prompt?: string }>;
+  },
   scope: AgentScope = "user",
 ) {
   return jsonRequest<AgentFiles>(

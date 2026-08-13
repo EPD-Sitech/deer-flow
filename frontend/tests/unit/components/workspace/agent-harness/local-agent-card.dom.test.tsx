@@ -61,7 +61,6 @@ describe("LocalAgentCard management menu", () => {
     });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
-    await screen.findByText("克隆");
   }
 
   it("exposes migrated local management actions", async () => {
@@ -71,6 +70,8 @@ describe("LocalAgentCard management menu", () => {
       model: null,
       tool_groups: null,
       skills: null,
+      can_view_details: true,
+      can_edit_guide_questions: false,
     });
     await openMenu("report-agent");
 
@@ -83,7 +84,7 @@ describe("LocalAgentCard management menu", () => {
     expect(screen.getByText("模型设置")).toBeTruthy();
   });
 
-  it("limits a public Agent to clone and export for regular users", async () => {
+  it("limits a public Agent to read-only details for regular users", async () => {
     renderCard({
       name: "public-report-agent",
       description: "Public reports",
@@ -93,18 +94,21 @@ describe("LocalAgentCard management menu", () => {
       runtime_name: "public-report-agent",
       scope: "platform",
       can_manage: false,
+      can_view_details: true,
+      can_edit_guide_questions: true,
       can_edit: false,
       can_delete: false,
-      can_export: true,
-      can_clone: true,
+      can_export: false,
+      can_clone: false,
       can_share: false,
       can_batch: false,
     });
     await openMenu("public-report-agent");
 
-    expect(screen.getByText("克隆")).toBeTruthy();
-    expect(screen.getByText("导出 ZIP")).toBeTruthy();
-    expect(screen.getByText("导出 Markdown")).toBeTruthy();
+    expect(screen.getByText("查看详情")).toBeTruthy();
+    expect(screen.queryByText("克隆")).toBeNull();
+    expect(screen.queryByText("导出 ZIP")).toBeNull();
+    expect(screen.queryByText("导出 Markdown")).toBeNull();
     expect(screen.queryByText("分享公开链接")).toBeNull();
     expect(screen.queryByText("详情编辑")).toBeNull();
     expect(screen.queryByText("定时任务")).toBeNull();
@@ -122,6 +126,8 @@ describe("LocalAgentCard management menu", () => {
       runtime_name: "public-admin-agent",
       scope: "platform",
       can_manage: true,
+      can_view_details: true,
+      can_edit_guide_questions: false,
       can_edit: true,
       can_delete: true,
       can_export: true,
@@ -138,7 +144,7 @@ describe("LocalAgentCard management menu", () => {
     expect(screen.getByText("删除")).toBeTruthy();
   });
 
-  it("uses the runtime alias to chat with and clone a Chinese public Agent", async () => {
+  it("uses the runtime alias to chat with a Chinese public Agent", async () => {
     renderCard({
       name: "ai产品经理培训答疑",
       runtime_name: "agent-0123456789abcdef",
@@ -148,10 +154,12 @@ describe("LocalAgentCard management menu", () => {
       skills: null,
       scope: "platform",
       can_manage: false,
+      can_view_details: true,
+      can_edit_guide_questions: false,
       can_edit: false,
       can_delete: false,
-      can_export: true,
-      can_clone: true,
+      can_export: false,
+      can_clone: false,
       can_share: false,
       can_batch: false,
     });
@@ -162,13 +170,7 @@ describe("LocalAgentCard management menu", () => {
     );
 
     await openMenu("ai产品经理培训答疑");
-    fireEvent.click(screen.getByRole("menuitem", { name: "克隆" }));
-    const cloneNameInput = screen.getByRole("textbox", {
-      name: "新智能体名称",
-    });
-    expect(cloneNameInput instanceof HTMLInputElement).toBe(true);
-    if (cloneNameInput instanceof HTMLInputElement) {
-      expect(cloneNameInput.value).toBe("agent-0123456789abcdef-copy");
-    }
+    expect(screen.getByRole("menuitem", { name: "查看详情" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "克隆" })).toBeNull();
   });
 });

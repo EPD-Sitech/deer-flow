@@ -93,7 +93,7 @@ describe("local agent management API", () => {
           enabled: true,
           public_slug: "report-writer",
           public_name: "report-writer",
-          public_path: "/agent/report-writer",
+          public_path: "/public/agent/report-writer",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );

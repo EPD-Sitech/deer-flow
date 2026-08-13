@@ -22,7 +22,7 @@ not included.
 Migrated code is isolated under
 `frontend/src/components/workspace/agent-harness/` and
 `frontend/src/app/workspace/agents/local/`. Public links use the standalone
-`https://fintech.teamshub.com/agent/{public_name}` page. Sharing must be explicitly enabled; the owner can
+`{current-origin}/public/agent/{public_name}` page. Sharing must be explicitly enabled; the owner can
 set or reset a concise public alias, copy the link, and disable the link again.
 
 ## Backend
@@ -54,10 +54,21 @@ page and component files, `config.yaml`, README files, and AGENTS guides remain
 unchanged.
 
 Permission rules are enforced by both the catalog capabilities and the
-management endpoints. Regular users may clone and export public Agents. Only
-administrators may edit, delete, share, schedule, debug, version, or batch
-select/delete public Agents. Custom Agent management remains isolated to the
-current owner.
+management endpoints. Regular users may chat with public Agents and inspect
+their configuration and SOUL in a read-only detail view. They cannot clone,
+export, edit, delete, share, schedule, debug, version, or batch-select public
+Agents. Administrators retain those public-Agent management operations. Custom
+Agent management remains isolated to the current owner.
+
+Agent cards use a plain background without decorative patterns. Their compact
+tag row contains the category and tool groups only; skills remain part of the
+Agent configuration but are not rendered as card tags.
+
+New-chat guide questions are stored by the migration layer under
+`config.yaml -> ui.guide_questions`, with up to six entries. Administrators can
+add, edit, reorder, and delete them. Regular users can view and use them in
+public-Agent details, new-chat welcome views, and public-share pages, but the
+backend rejects attempts by regular users to change that field.
 
 The public Agent API exposes only non-sensitive metadata and a lightweight
 conversation endpoint. It never returns SOUL content or ownership information.

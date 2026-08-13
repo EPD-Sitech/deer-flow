@@ -191,18 +191,18 @@ export function LocalAgentGallery() {
       <div className="bg-card shrink-0 border-b">
         <header className="flex flex-col gap-4 px-5 py-4 sm:px-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
-            <h1 className="text-foreground text-2xl leading-tight font-semibold">
+            <h1 className="text-2xl leading-tight font-semibold text-[#173a5b] dark:text-slate-100">
               {text.title}
             </h1>
-            <p className="text-muted-foreground mt-1 text-sm">
+            <p className="mt-1 text-sm text-[#71869a] dark:text-slate-400">
               {text.description}
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
             <div className="relative min-w-0 flex-1 sm:w-72 xl:w-80">
-              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#89a0b3] dark:text-slate-500" />
               <Input
-                className="bg-background text-foreground placeholder:text-muted-foreground h-9 rounded-md border pl-9 text-xs shadow-none"
+                className="bg-background h-9 rounded-lg border-[#d8e5ef] pl-9 text-xs text-[#34495e] shadow-none placeholder:text-[#9badbf] focus-visible:border-[#86bae1] focus-visible:ring-2 focus-visible:ring-sky-200/50 dark:border-slate-700 dark:text-slate-100"
                 placeholder={text.search}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
@@ -210,14 +210,14 @@ export function LocalAgentGallery() {
             </div>
             <Button
               variant="outline"
-              className="text-foreground h-9 shrink-0 px-3 text-xs"
+              className="h-9 shrink-0 rounded-lg px-3 text-xs"
               onClick={() => setImportOpen(true)}
             >
               <UploadIcon className="size-3.5" />
               {locale.startsWith("zh") ? "导入" : "Import"}
             </Button>
             <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 shrink-0 px-3 text-xs"
+              className="h-9 shrink-0 rounded-lg bg-[#2587ea] px-3 text-xs text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] hover:bg-[#1778d8]"
               onClick={() => router.push("/workspace/agents/new")}
             >
               <PlusIcon className="mr-1.5 size-3.5" />
@@ -226,7 +226,7 @@ export function LocalAgentGallery() {
           </div>
         </header>
 
-        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-3 border-t border-[#edf2f6] px-5 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between dark:border-slate-800">
           <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
             {LOCAL_AGENT_CATEGORIES.map((category) => {
               const active = categoryFilter === category.id;
@@ -237,8 +237,8 @@ export function LocalAgentGallery() {
                   onClick={() => setCategoryFilter(category.id)}
                   className={
                     active
-                      ? "border-foreground/20 bg-accent text-foreground h-7 shrink-0 cursor-pointer rounded-md border px-2.5 text-[10px] font-semibold"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground h-7 shrink-0 cursor-pointer rounded-md border border-transparent px-2.5 text-[10px] font-medium transition-colors"
+                      ? "h-7 shrink-0 cursor-pointer rounded-md border border-[#d2e3f1] bg-[#edf6ff] px-2.5 text-[10px] font-semibold text-[#1673c7] shadow-sm dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                      : "h-7 shrink-0 cursor-pointer rounded-md border border-transparent px-2.5 text-[10px] font-medium text-[#75879a] transition-colors hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                   }
                 >
                   {getLocalAgentCategoryLabel(category.id, locale)}
@@ -250,10 +250,10 @@ export function LocalAgentGallery() {
             })}
           </div>
           <div className="flex items-center justify-between gap-3 xl:justify-end">
-            <span className="text-muted-foreground shrink-0 text-[11px]">
+            <span className="shrink-0 text-[11px] text-[#8295a7] dark:text-slate-400">
               {text.count(filteredAgents.length)}
             </span>
-            <div className="bg-muted inline-flex h-8 items-center gap-0.5 rounded-md border p-0.5">
+            <div className="inline-flex h-8 items-center gap-0.5 rounded-lg border border-[#d8e5ef] bg-[#f6f8fb] p-0.5 dark:border-slate-700 dark:bg-slate-900">
               {(
                 [
                   ["all", locale.startsWith("zh") ? "全部" : "All"],
@@ -267,8 +267,8 @@ export function LocalAgentGallery() {
                   onClick={() => setScopeFilter(value)}
                   className={
                     scopeFilter === value
-                      ? "bg-background text-foreground h-6 cursor-pointer rounded-md px-2.5 text-[10px] font-medium shadow-sm"
-                      : "text-muted-foreground hover:text-foreground h-6 cursor-pointer rounded-md px-2.5 text-[10px] font-medium"
+                      ? "h-6 cursor-pointer rounded-md bg-white px-2.5 text-[10px] font-medium text-[#2376ba] shadow-sm dark:bg-slate-800 dark:text-sky-300"
+                      : "h-6 cursor-pointer rounded-md px-2.5 text-[10px] font-medium text-[#71869a] hover:text-[#365a78] dark:text-slate-400 dark:hover:text-slate-100"
                   }
                 >
                   {label}
@@ -299,7 +299,7 @@ export function LocalAgentGallery() {
           <Button
             size="sm"
             variant="outline"
-            className="text-destructive h-7 text-xs"
+            className="h-7 text-xs text-red-600"
             disabled={batchLoading}
             onClick={() => void handleBatchDelete()}
           >
@@ -327,9 +327,9 @@ export function LocalAgentGallery() {
             {text.loadError}
           </div>
         ) : filteredAgents.length === 0 ? (
-          <div className="bg-card mx-auto flex h-64 max-w-2xl flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-8 text-center">
-            <div className="bg-muted flex size-14 items-center justify-center rounded-full">
-              <BotIcon className="text-muted-foreground size-7" />
+          <div className="bg-card mx-auto flex h-64 max-w-2xl flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-[#cadbe8] px-8 text-center dark:border-slate-700">
+            <div className="flex size-14 items-center justify-center rounded-full border border-sky-200 bg-[#eef7ff] dark:border-sky-800 dark:bg-sky-950/60">
+              <BotIcon className="size-7 text-[#2587ea]" />
             </div>
             <div>
               <p className="text-lg font-semibold">{t.agents.emptyTitle}</p>

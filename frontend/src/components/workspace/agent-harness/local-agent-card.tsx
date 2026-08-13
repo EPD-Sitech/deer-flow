@@ -256,17 +256,17 @@ export function LocalAgentCard({
               <BotIcon className="size-[18px]" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-foreground truncate text-[13px] leading-5 font-semibold">
+              <h2 className="truncate text-[13px] leading-5 font-semibold text-[#173a5b] dark:text-slate-100">
                 {agent.name}
               </h2>
-              <p className="text-muted-foreground mt-0.5 truncate text-[10px]">
+              <p className="mt-0.5 truncate text-[10px] text-[#8292a3] dark:text-slate-400">
                 {scopeLabel} · {categoryLabel}
                 {agent.model ? ` · ${agent.model}` : ""}
               </p>
             </div>
           </div>
 
-          <p className="text-muted-foreground mt-2 line-clamp-2 h-8 pr-2 text-[11px] leading-[1.5]">
+          <p className="mt-2 line-clamp-2 h-8 pr-2 text-[11px] leading-[1.5] text-[#61768a] dark:text-slate-300">
             {agent.description || text.fallback}
           </p>
 
@@ -287,7 +287,7 @@ export function LocalAgentCard({
 
           <Button
             size="sm"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 absolute right-3 bottom-3 size-8 rounded-lg p-0 transition-transform hover:-translate-y-0.5"
+            className="absolute right-3 bottom-3 size-8 rounded-lg bg-[#2587ea] p-0 text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] transition-transform hover:-translate-y-0.5 hover:bg-[#1778d8]"
             onClick={(event) => {
               event.stopPropagation();
               handleChat();
@@ -303,7 +303,7 @@ export function LocalAgentCard({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="text-muted-foreground hover:bg-accent hover:text-foreground absolute top-2.5 right-2.5 inline-flex size-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  className="absolute top-2.5 right-2.5 inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#7b91a5] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
                   aria-label={`${agent.name}: ${text.more}`}
                   title={text.more}
                   onClick={(event) => event.stopPropagation()}

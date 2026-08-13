@@ -152,21 +152,21 @@ export function SkillsGallery() {
   return (
     <div className="flex size-full flex-col">
       {/* 页面头部 */}
-      <div className="shrink-0 border-b border-border bg-[var(--gp-surface-from)]">
+      <div className="shrink-0 border-b">
         <header className="flex flex-col gap-4 px-5 py-4 sm:px-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h1 className="text-[24px] leading-tight font-semibold text-[#173a5b] dark:text-slate-100">
+            <h1 className="text-foreground text-[24px] leading-tight font-semibold">
               推荐技能
             </h1>
-            <p className="mt-1 text-sm text-[#71869a] dark:text-slate-400">
+            <p className="text-muted-foreground mt-1 text-sm">
               试试推荐业务技能与能力
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
             <div className="relative min-w-0 flex-1 sm:w-[280px] xl:w-[320px]">
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#89a0b3] dark:text-slate-500" />
+              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
               <Input
-                className="h-9 rounded-[8px] border-[#d8e5ef] bg-white pl-9 text-xs text-[#34495e] shadow-none placeholder:text-[#9badbf] focus-visible:border-[#86bae1] focus-visible:ring-2 focus-visible:ring-sky-200/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                className="bg-background text-foreground placeholder:text-muted-foreground h-9 rounded-md border pl-9 text-sm shadow-none"
                 placeholder="搜索技能..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
@@ -176,14 +176,14 @@ export function SkillsGallery() {
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
                   variant="outline"
-                  className="h-9 flex-1 rounded-[8px] border-[#d8e5ef] bg-white px-3 text-xs text-[#49677f] shadow-none hover:bg-[#f3f8fc] hover:text-[#274f72] sm:flex-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  className="text-foreground h-9 flex-1 px-3 text-xs sm:flex-none"
                   onClick={() => setImportDialogOpen(true)}
                 >
                   <UploadIcon className="mr-1.5 size-3.5" />
                   导入技能
                 </Button>
                 <Button
-                  className="h-9 flex-1 rounded-[8px] bg-[linear-gradient(145deg,#2587ea,#419bff)] px-3 text-xs text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] hover:bg-[linear-gradient(145deg,#2587ea,#419bff)] hover:opacity-95 sm:flex-none"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 flex-1 px-3 text-xs sm:flex-none"
                   onClick={() => setCreateDialogOpen(true)}
                 >
                   <PlusIcon className="mr-1.5 size-3.5" />
@@ -196,15 +196,15 @@ export function SkillsGallery() {
       </div>
 
       {/* 分类筛选 + scope 筛选 + 数量 */}
-      <div className="flex shrink-0 flex-col gap-3 border-b border-[#edf2f6] px-5 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between dark:border-slate-800">
+      <div className="flex shrink-0 flex-col gap-3 border-b px-5 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
           <button
             type="button"
             onClick={() => setCategoryFilter("all")}
             className={`h-7 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-[10px] font-medium transition-colors ${
               categoryFilter === "all"
-                ? "border-[#d2e3f1] bg-[#edf6ff] font-semibold text-[#1673c7] shadow-[0_2px_8px_rgba(35,83,125,0.08)] dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                : "border-transparent bg-transparent text-[#75879a] hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                ? "bg-accent text-foreground border-foreground/20 font-semibold"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground border-transparent bg-transparent"
             }`}
           >
             全部分类
@@ -216,8 +216,8 @@ export function SkillsGallery() {
               onClick={() => setCategoryFilter(category.id)}
               className={`h-7 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-[10px] font-medium transition-colors ${
                 categoryFilter === category.id
-                  ? "border-[#d2e3f1] bg-[#edf6ff] font-semibold text-[#1673c7] shadow-[0_2px_8px_rgba(35,83,125,0.08)] dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                  : "border-transparent bg-transparent text-[#75879a] hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  ? "bg-accent text-foreground border-foreground/20 font-semibold"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground border-transparent bg-transparent"
               }`}
             >
               {category.label}
@@ -226,10 +226,10 @@ export function SkillsGallery() {
         </div>
 
         <div className="flex items-center justify-between gap-3 xl:justify-end">
-          <span className="shrink-0 text-[11px] text-[#8295a7] dark:text-slate-400">
+          <span className="text-muted-foreground shrink-0 text-[11px]">
             {filteredSkills.length} 个技能
           </span>
-          <div className="inline-flex h-8 items-center gap-0.5 rounded-[8px] border border-[#d8e5ef] bg-[#f6f8fb] p-0.5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="bg-muted inline-flex h-8 items-center gap-0.5 rounded-[8px] border p-0.5">
             {(
               [
                 ["all", "全部"],
@@ -243,8 +243,8 @@ export function SkillsGallery() {
                 onClick={() => setScopeFilter(value)}
                 className={`h-6 cursor-pointer rounded-[6px] px-2.5 text-[10px] font-medium transition-colors ${
                   scopeFilter === value
-                    ? "bg-white text-[#2376ba] shadow-[0_1px_5px_rgba(37,84,124,0.13)] dark:bg-slate-800 dark:text-sky-300"
-                    : "text-[#71869a] hover:text-[#365a78] dark:text-slate-400 dark:hover:text-slate-100"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {label}
@@ -256,14 +256,14 @@ export function SkillsGallery() {
 
       {/* 批量操作工具栏 */}
       {selectedSkills.size > 0 && (
-        <div className="flex items-center gap-3 border-b border-border bg-[var(--gp-surface-from)] px-5 py-2 sm:px-6">
-          <span className="text-text-secondary text-sm font-medium">
+        <div className="flex items-center gap-3 border-b px-5 py-2 sm:px-6">
+          <span className="text-foreground text-sm font-medium">
             已选择 {selectedSkills.size} 个
           </span>
           <Button
             size="sm"
             variant="outline"
-            className="h-7 border-sky-200 text-sky-700 hover:bg-[var(--gp-surface-from)]"
+            className="text-foreground h-7"
             onClick={handleSelectAll}
           >
             <CheckSquareIcon className="mr-1 h-3.5 w-3.5" />
@@ -274,7 +274,7 @@ export function SkillsGallery() {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 border-red-200 text-red-700 hover:bg-red-50"
+            className="text-destructive hover:bg-destructive/10 h-7 border-destructive/30"
             onClick={() => setBatchDeleteConfirm(true)}
             disabled={batchDelete.isPending}
           >
@@ -284,7 +284,7 @@ export function SkillsGallery() {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 border-sky-200 text-sky-700 hover:bg-[var(--gp-surface-from)]"
+            className="text-foreground h-7"
             onClick={handleBatchExport}
           >
             <DownloadIcon className="mr-1 h-3.5 w-3.5" />
@@ -293,7 +293,7 @@ export function SkillsGallery() {
           <Button
             size="sm"
             variant="ghost"
-            className="text-text-muted h-7"
+            className="text-muted-foreground h-7"
             onClick={clearSelection}
           >
             取消
@@ -317,9 +317,9 @@ export function SkillsGallery() {
             {error.message}
           </div>
         ) : filteredSkills.length === 0 ? (
-          <div className="mx-auto flex h-64 max-w-2xl flex-col items-center justify-center gap-4 rounded-[14px] border border-dashed border-[#cadbe8] bg-[var(--gp-surface-from)] px-8 text-center dark:border-slate-700">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-sky-200/80 bg-[#eef7ff] shadow-[0_12px_24px_-18px_rgba(39,96,201,0.45)] dark:border-sky-800 dark:bg-sky-950/60">
-              <PuzzleIcon className="text-primary h-8 w-8" />
+          <div className="mx-auto flex h-64 max-w-2xl flex-col items-center justify-center gap-4 rounded-[14px] border border-dashed px-8 text-center">
+            <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-full">
+              <PuzzleIcon className="text-muted-foreground h-7 w-7" />
             </div>
             <div>
               <p className="text-foreground text-lg font-semibold">
@@ -330,11 +330,7 @@ export function SkillsGallery() {
               </p>
             </div>
             {canManage && (
-              <Button
-                variant="outline"
-                className="text-text hover:text-text mt-2 rounded-[8px] border-sky-200 bg-[var(--gp-surface-from)] hover:bg-[var(--gp-surface-from)]"
-                onClick={() => setCreateDialogOpen(true)}
-              >
+              <Button variant="outline" className="mt-2" onClick={() => setCreateDialogOpen(true)}>
                 <PlusIcon className="mr-1.5 h-4 w-4" />
                 {t.settings.skills.emptyButton}
               </Button>
@@ -384,7 +380,7 @@ export function SkillsGallery() {
 
       {/* 批量删除确认弹窗 */}
       <Dialog open={batchDeleteConfirm} onOpenChange={setBatchDeleteConfirm}>
-        <DialogContent className="glass-panel border-[color:var(--gp-border)]">
+        <DialogContent className="glass-panel border-border">
           <DialogHeader>
             <DialogTitle>批量删除技能</DialogTitle>
             <DialogDescription>

@@ -83,7 +83,7 @@ export function ImportSkillDialog({
         else onOpenChange(true);
       }}
     >
-      <DialogContent className="border-[color:var(--gp-border)] glass-panel">
+      <DialogContent className="glass-panel border-border">
         <DialogHeader>
           <DialogTitle>导入技能</DialogTitle>
           <DialogDescription>
@@ -94,16 +94,16 @@ export function ImportSkillDialog({
         <div className="space-y-4 py-2">
           {/* Drop zone */}
           <div
-            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sky-200 bg-sky-50/50 px-6 py-8 transition-colors hover:border-sky-300 hover:bg-[var(--gp-surface-from)]"
+            className="hover:border-foreground/25 hover:bg-muted/50 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/30 px-6 py-8 transition-colors"
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
           >
-            <UploadIcon className="h-8 w-8 text-sky-400" />
-            <p className="text-sm font-medium text-text-secondary">
+            <UploadIcon className="text-muted-foreground h-8 w-8" />
+            <p className="text-foreground text-sm font-medium">
               {file ? file.name : "选择或拖拽技能包到此处"}
             </p>
-            <p className="text-xs text-text-muted">.zip, .skill</p>
+            <p className="text-muted-foreground text-xs">.zip, .skill</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -114,12 +114,12 @@ export function ImportSkillDialog({
           </div>
 
           {validationError && (
-            <p className="text-sm break-words whitespace-pre-wrap text-red-600">
+            <p className="text-destructive text-sm break-words whitespace-pre-wrap">
               {validationError}
             </p>
           )}
 
-          <p className="text-xs text-text-muted">
+          <p className="text-muted-foreground text-xs">
             导入后会进行安全扫描，并自动为技能生成中文名称与描述。
           </p>
         </div>
@@ -127,14 +127,13 @@ export function ImportSkillDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            className="border-sky-200 bg-[var(--gp-surface-from)] text-text hover:bg-[var(--gp-surface-from)] hover:text-text"
             onClick={handleClose}
             disabled={importSkillPackage.isPending}
           >
             取消
           </Button>
           <Button
-            className="bg-[linear-gradient(135deg,#2f6bff_0%,#63b4ff_100%)] text-white"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={handleImport}
             disabled={importSkillPackage.isPending || !file}
           >

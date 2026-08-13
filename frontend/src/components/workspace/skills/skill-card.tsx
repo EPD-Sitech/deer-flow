@@ -323,59 +323,61 @@ export function SkillCard({
             }
             aria-label={`${skill.enabled ? "停用" : "启用"}技能：${displayName}`}
           />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex size-[26px] cursor-pointer items-center justify-center rounded-[7px] text-[#8b9cad] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                aria-label={`${displayName} 更多操作`}
-                title="更多操作"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
+          {isAdmin && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex size-[26px] cursor-pointer items-center justify-center rounded-[7px] text-[#8b9cad] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  aria-label={`${displayName} 更多操作`}
+                  title="更多操作"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <MoreHorizontalIcon className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-[152px] min-w-[152px] rounded-[11px] border-[#d8e4ee] bg-[rgba(255,255,255,0.98)] p-1.5 shadow-[0_16px_36px_rgba(27,67,104,0.16)] backdrop-blur-none dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-[0_16px_36px_rgba(0,0,0,0.3)]"
               >
-                <MoreHorizontalIcon className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-[152px] min-w-[152px] rounded-[11px] border-[#d8e4ee] bg-[rgba(255,255,255,0.98)] p-1.5 shadow-[0_16px_36px_rgba(27,67,104,0.16)] backdrop-blur-none dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-[0_16px_36px_rgba(0,0,0,0.3)]"
-            >
-              <DropdownMenuItem
-                className={MENU_ITEM_CLASS}
-                onSelect={() => onViewDetail?.()}
-              >
-                <EyeIcon />
-                查看详情
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className={MENU_ITEM_CLASS}
-                onSelect={handleExport}
-              >
-                <DownloadIcon />
-                导出 Zip
-              </DropdownMenuItem>
-              {canManage && (
-                <>
-                  <DropdownMenuItem
-                    className={MENU_ITEM_CLASS}
-                    onSelect={() => setCategoryOpen(true)}
-                  >
-                    <SettingsIcon />
-                    编辑设置
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className={`${MENU_ITEM_CLASS} ${MENU_DANGER_ITEM_CLASS}`}
-                    variant="destructive"
-                    onSelect={() => setDeleteOpen(true)}
-                    disabled={deleteSkillMutation.isPending}
-                  >
-                    <Trash2Icon />
-                    删除技能
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem
+                  className={MENU_ITEM_CLASS}
+                  onSelect={() => onViewDetail?.()}
+                >
+                  <EyeIcon />
+                  查看详情
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={MENU_ITEM_CLASS}
+                  onSelect={handleExport}
+                >
+                  <DownloadIcon />
+                  导出 Zip
+                </DropdownMenuItem>
+                {canManage && (
+                  <>
+                    <DropdownMenuItem
+                      className={MENU_ITEM_CLASS}
+                      onSelect={() => setCategoryOpen(true)}
+                    >
+                      <SettingsIcon />
+                      编辑设置
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className={`${MENU_ITEM_CLASS} ${MENU_DANGER_ITEM_CLASS}`}
+                      variant="destructive"
+                      onSelect={() => setDeleteOpen(true)}
+                      disabled={deleteSkillMutation.isPending}
+                    >
+                      <Trash2Icon />
+                      删除技能
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </Card>
 

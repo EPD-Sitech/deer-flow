@@ -77,12 +77,12 @@ const SKILL_TINTS: Record<string, string> = {
 };
 
 const MENU_ITEM_CLASS =
-  "text-muted-foreground h-[34px] rounded-[7px] px-[9px] py-0 text-[10px] font-normal hover:bg-accent hover:text-foreground focus:bg-accent focus:text-foreground [&_svg]:size-[15px]";
+  "h-[34px] rounded-[7px] px-[9px] py-0 text-[10px] font-normal text-[#5d7185] focus:bg-[#f0f6fb] focus:text-[#1d6da8] hover:bg-[#f0f6fb] hover:text-[#1d6da8] [&_svg]:size-[15px]";
 const MENU_DANGER_ITEM_CLASS =
-  "text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive mt-1 rounded-t-none rounded-b-[7px] border-t border-destructive/20";
+  "mt-1 rounded-t-none rounded-b-[7px] border-t border-[#f2dede] text-[#e04a52] focus:bg-[#fff3f3] focus:text-[#d9343f] hover:bg-[#fff3f3] hover:text-[#d9343f]";
 
 const CATEGORY_CHIP_CLASS =
-  "hover:border-foreground/30 hover:text-foreground h-8 cursor-pointer rounded-[8px] border px-[13px] text-[10px] transition-colors";
+  "h-8 cursor-pointer rounded-[8px] border px-[13px] text-[10px] transition-colors hover:border-[#a9cbe6] hover:text-[#1671c5]";
 
 function scopeLabel(scope: string | undefined): string {
   if (scope === "user") return "自定义";
@@ -205,7 +205,7 @@ export function SkillCard({
   return (
     <>
       <Card
-        className={`skill-module-card group relative h-[176px] cursor-pointer gap-0 overflow-hidden rounded-[12px] border py-0 shadow-[0_1px_2px_rgba(15,56,94,0.05)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-[3px] hover:border-foreground/20 hover:shadow-[0_16px_34px_rgba(38,91,139,0.12)] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-sky-300 ${skill.enabled ? "" : "opacity-90"}`}
+        className={`skill-module-card group relative h-[176px] cursor-pointer gap-0 overflow-hidden rounded-[12px] border-[#d8e5ef] py-0 shadow-[0_1px_2px_rgba(15,56,94,0.05)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-[3px] hover:border-[#9bc9ed] hover:shadow-[0_16px_34px_rgba(38,91,139,0.12)] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-sky-300 ${skill.enabled ? "" : "opacity-90"}`}
         style={
           {
             "--skill-accent": skillAccent,
@@ -245,13 +245,13 @@ export function SkillCard({
               <h2
                 className={`truncate text-[12.5px] leading-5 font-semibold ${
                   skill.enabled
-                    ? "text-foreground"
-                    : "text-muted-foreground"
+                    ? "text-[#173a5b] dark:text-slate-100"
+                    : "text-[#7e90a2] dark:text-slate-400"
                 }`}
               >
                 {displayName}
               </h2>
-              <p className="text-muted-foreground mt-0.5 truncate text-[9px]">
+              <p className="mt-0.5 truncate text-[9px] text-[#8b9bad] dark:text-slate-500">
                 {metaLabel}
               </p>
             </div>
@@ -261,8 +261,8 @@ export function SkillCard({
             <p
               className={`mt-2 line-clamp-2 h-8 pr-2 text-[10px] leading-[1.65] ${
                 skill.enabled
-                  ? "text-muted-foreground"
-                  : "text-muted-foreground/70"
+                  ? "text-[#6d8093] dark:text-slate-300"
+                  : "text-[#9aa9b8] dark:text-slate-500"
               }`}
             >
               {displayDesc}
@@ -274,12 +274,12 @@ export function SkillCard({
               className={`max-w-20 truncate rounded-full px-2 py-0.5 text-[9px] font-medium ${
                 skill.scope === "user"
                   ? "bg-[#f3f0ff] text-[#6d4bd1]"
-                  : "bg-muted text-muted-foreground"
+                  : "bg-[#ebf4ff] text-[#2582ea]"
               }`}
             >
               {scopeLabel(skill.scope)}
             </span>
-            <span className="bg-muted text-foreground max-w-20 truncate rounded-full px-2 py-0.5 text-[9px] font-medium">
+            <span className="max-w-20 truncate rounded-full bg-[#eef2f6] px-2 py-0.5 text-[9px] font-medium text-[#68798b]">
               {categoryLabel}
             </span>
             {displayTags.map((tag, index) => (
@@ -298,14 +298,14 @@ export function SkillCard({
 
           <span
             className={`absolute right-3.5 bottom-3 inline-flex items-center gap-1 text-[9px] font-semibold ${
-              skill.enabled ? "text-[#189a80]" : "text-muted-foreground"
+              skill.enabled ? "text-[#189a80]" : "text-[#93a3b4]"
             }`}
           >
             <span
               className={`size-1.5 rounded-full ${
                 skill.enabled
                   ? "bg-[#50d3b9] shadow-[0_0_0_3px_rgba(80,211,185,0.16)]"
-                  : "bg-border"
+                  : "bg-[#b6c5d2]"
               }`}
             />
             {skill.enabled ? "运行中" : "已停用"}
@@ -317,7 +317,7 @@ export function SkillCard({
             checked={skill.enabled}
             onCheckedChange={handleToggleEnabled}
             onClick={(event) => event.stopPropagation()}
-            className="h-[19px] w-[34px]"
+            className="h-[19px] w-[34px] data-[state=checked]:bg-[#419bff]"
             disabled={
               env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" || !isAdmin
             }
@@ -327,7 +327,7 @@ export function SkillCard({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground inline-flex size-[26px] cursor-pointer items-center justify-center rounded-[7px] transition-colors hover:bg-accent hover:text-foreground"
+                className="inline-flex size-[26px] cursor-pointer items-center justify-center rounded-[7px] text-[#8b9cad] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
                 aria-label={`${displayName} 更多操作`}
                 title="更多操作"
                 onPointerDown={(event) => event.stopPropagation()}
@@ -338,7 +338,7 @@ export function SkillCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="bg-popover text-popover-foreground w-[152px] min-w-[152px] rounded-[11px] border p-1.5 shadow-[0_16px_36px_rgba(27,67,104,0.16)]"
+              className="w-[152px] min-w-[152px] rounded-[11px] border-[#d8e4ee] bg-[rgba(255,255,255,0.98)] p-1.5 shadow-[0_16px_36px_rgba(27,67,104,0.16)] backdrop-blur-none dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-[0_16px_36px_rgba(0,0,0,0.3)]"
             >
               <DropdownMenuItem
                 className={MENU_ITEM_CLASS}
@@ -383,23 +383,23 @@ export function SkillCard({
       <Dialog open={categoryOpen} onOpenChange={setCategoryOpen}>
         <DialogContent
           showCloseButton={false}
-          className="max-h-[calc(100dvh-32px)] gap-0 overflow-hidden rounded-[14px] border bg-background p-0 shadow-[0_24px_70px_rgba(27,67,104,0.2)] backdrop-blur-none sm:max-w-[560px]"
+          className="max-h-[calc(100dvh-32px)] gap-0 overflow-hidden rounded-[14px] border-[#d8e4ee] bg-white p-0 shadow-[0_24px_70px_rgba(27,67,104,0.2)] backdrop-blur-none sm:max-w-[560px] dark:border-slate-700 dark:bg-slate-950"
         >
-          <header className="flex items-start gap-[11px] border-b bg-transparent px-6 pt-5 pb-[15px]">
-            <div className="bg-muted text-muted-foreground grid size-[38px] shrink-0 place-items-center rounded-[11px]">
+          <header className="flex items-start gap-[11px] border-b border-[#edf2f7] bg-[linear-gradient(120deg,#f7fbff,#eef6ff_70%,#f9fcff)] px-6 pt-5 pb-[15px] dark:border-slate-800 dark:bg-[linear-gradient(120deg,#172033,#0f172a_70%,#111827)]">
+            <div className="grid size-[38px] shrink-0 place-items-center rounded-[11px] bg-[linear-gradient(145deg,#e2f0ff,#cfe6ff)] text-[#2582ea] shadow-[inset_0_0_0_1px_rgba(65,155,255,0.18)] dark:bg-[linear-gradient(145deg,#1e3a5f,#172b47)] dark:text-sky-300">
               <SettingsIcon className="size-[19px]" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-foreground truncate text-[17px] leading-6 font-semibold">
+              <DialogTitle className="truncate text-[17px] leading-6 font-semibold text-[#173b5e] dark:text-slate-100">
                 技能设置 · {displayName}
               </DialogTitle>
-              <DialogDescription className="text-muted-foreground mt-[3px] text-[10px]">
+              <DialogDescription className="mt-[3px] text-[10px] text-[#8496a8] dark:text-slate-400">
                 修改技能名称与类型，保存后立即生效
               </DialogDescription>
             </div>
             <button
               type="button"
-              className="text-muted-foreground hover:bg-accent hover:text-foreground ml-auto grid size-7 shrink-0 cursor-pointer place-items-center rounded-[7px] text-lg leading-none transition-colors"
+              className="ml-auto grid size-7 shrink-0 cursor-pointer place-items-center rounded-[7px] text-lg leading-none text-[#8b9cad] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
               aria-label="关闭"
               onClick={() => setCategoryOpen(false)}
             >
@@ -407,17 +407,17 @@ export function SkillCard({
             </button>
           </header>
 
-          <div className="max-h-[calc(100dvh-260px)] overflow-auto bg-background px-6 pt-4 pb-1.5">
-            <section className="mb-3.5 overflow-hidden rounded-[12px] border bg-background shadow-[0_1px_2px_rgba(15,56,94,0.05)]">
-              <div className="flex h-11 items-center gap-2.5 border-b bg-muted/40 px-3.5">
-                <PencilIcon className="text-muted-foreground size-4" />
-                <b className="text-foreground text-xs font-semibold">
+          <div className="max-h-[calc(100dvh-260px)] overflow-auto bg-[#f7fafd] px-6 pt-4 pb-1.5 dark:bg-slate-950/80">
+            <section className="mb-3.5 overflow-hidden rounded-[12px] border border-[#e4edf5] bg-white shadow-[0_1px_2px_rgba(15,56,94,0.05)] dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex h-11 items-center gap-2.5 border-b border-[#eef3f8] bg-[linear-gradient(120deg,#fcfeff,#f5f9fd)] px-3.5 dark:border-slate-800 dark:bg-[linear-gradient(120deg,#111827,#172033)]">
+                <PencilIcon className="size-4 text-[#2582ea] dark:text-sky-300" />
+                <b className="text-xs font-semibold text-[#2c4a66] dark:text-slate-200">
                   基础信息
                 </b>
               </div>
               <div className="p-3.5">
                 <label
-                  className="text-muted-foreground mb-1.5 block text-[10px] font-semibold"
+                  className="mb-1.5 block text-[10px] font-semibold text-[#5d7185] dark:text-slate-300"
                   htmlFor={`skill-name-${skill.name}`}
                 >
                   技能名称
@@ -427,7 +427,7 @@ export function SkillCard({
                   value={displayNameValue}
                   onChange={(event) => setDisplayNameValue(event.target.value)}
                   placeholder={skill.name}
-                  className="border-input bg-background h-[38px] rounded-[9px] px-3 text-sm shadow-none transition"
+                  className="h-[38px] rounded-[9px] border-[#d3e1ee] bg-white px-3 text-sm text-[#1e293b] shadow-none transition focus-visible:border-[#87bdf0] focus-visible:ring-2 focus-visible:ring-[rgba(65,155,255,0.13)] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
                 <div className="mt-[13px] grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {(
@@ -458,25 +458,27 @@ export function SkillCard({
                         aria-pressed={active}
                         className={`relative flex cursor-default items-center gap-2.5 rounded-[10px] border p-[11px_13px] text-left transition-colors ${
                           active
-                            ? "border-foreground/30 bg-accent"
-                            : "border-border bg-background"
+                            ? "border-[#4ba3f5] bg-[#f2f9ff] shadow-[0_0_0_3px_rgba(65,155,255,0.12)] dark:border-sky-700 dark:bg-sky-950/45"
+                            : "border-[#dfe9f2] bg-[#fbfdff] dark:border-slate-700 dark:bg-slate-950"
                         }`}
                       >
                         <Icon
                           className={`size-[17px] shrink-0 ${
-                            active ? "text-foreground" : "text-muted-foreground"
+                            active
+                              ? "text-[#2582ea] dark:text-sky-300"
+                              : "text-[#6f8ca3] dark:text-slate-500"
                           }`}
                         />
                         <span>
-                          <b className="text-foreground block text-[11px] font-semibold">
+                          <b className="block text-[11px] font-semibold text-[#3c5a76] dark:text-slate-200">
                             {scope.title}
                           </b>
-                          <small className="text-muted-foreground block text-[8.5px]">
+                          <small className="block text-[8.5px] text-[#8b9bad] dark:text-slate-500">
                             {scope.desc}
                           </small>
                         </span>
                         <span
-                          className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full bg-foreground text-background transition ${
+                          className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full bg-[#419bff] text-white transition ${
                             active
                               ? "scale-100 opacity-100"
                               : "scale-75 opacity-0"
@@ -491,13 +493,13 @@ export function SkillCard({
               </div>
             </section>
 
-            <section className="mb-3.5 overflow-hidden rounded-[12px] border bg-background shadow-[0_1px_2px_rgba(15,56,94,0.05)]">
-              <div className="flex h-11 items-center gap-2.5 border-b bg-muted/40 px-3.5">
-                <LayoutGridIcon className="text-muted-foreground size-4" />
-                <b className="text-foreground text-xs font-semibold">
+            <section className="mb-3.5 overflow-hidden rounded-[12px] border border-[#e4edf5] bg-white shadow-[0_1px_2px_rgba(15,56,94,0.05)] dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex h-11 items-center gap-2.5 border-b border-[#eef3f8] bg-[linear-gradient(120deg,#fcfeff,#f5f9fd)] px-3.5 dark:border-slate-800 dark:bg-[linear-gradient(120deg,#111827,#172033)]">
+                <LayoutGridIcon className="size-4 text-[#2582ea] dark:text-sky-300" />
+                <b className="text-xs font-semibold text-[#2c4a66] dark:text-slate-200">
                   类型
                 </b>
-                <span className="bg-muted text-muted-foreground ml-auto rounded-full px-2 py-0.5 text-[9px] font-bold">
+                <span className="ml-auto rounded-full bg-[#e0f7f1] px-2 py-0.5 text-[9px] font-bold text-[#189a80] dark:bg-emerald-950/60 dark:text-emerald-300">
                   1
                 </span>
               </div>
@@ -511,8 +513,8 @@ export function SkillCard({
                         type="button"
                         className={`${CATEGORY_CHIP_CLASS} ${
                           active
-                            ? "border-foreground/30 bg-accent font-bold text-foreground"
-                            : "border-border bg-background text-muted-foreground"
+                            ? "border-[#4ba3f5] bg-[#ebf4ff] font-bold text-[#1671c5] shadow-[0_0_0_3px_rgba(65,155,255,0.1)] dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-300"
+                            : "border-[#dfe9f2] bg-[#fbfdff] text-[#5d7185] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
                         }`}
                         onClick={() => setCategoryValue(category.id)}
                       >
@@ -525,16 +527,16 @@ export function SkillCard({
             </section>
           </div>
 
-          <footer className="flex justify-end gap-2 border-t bg-background px-6 pt-3 pb-[18px]">
+          <footer className="flex justify-end gap-2 border-t border-[#edf2f7] bg-white px-6 pt-3 pb-[18px] dark:border-slate-800 dark:bg-slate-950">
             <Button
               variant="outline"
-              className="h-9 px-3.5 text-[11px] font-semibold"
+              className="h-9 rounded-[10px] border-[#d1dfeb] bg-white px-3.5 text-[11px] font-semibold text-[#52677b] shadow-none hover:border-[#8fbfe8] hover:bg-[#fbfdff] hover:text-[#1471c3] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               onClick={() => setCategoryOpen(false)}
             >
               取消
             </Button>
             <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3.5 text-[11px] font-semibold"
+              className="h-9 rounded-[10px] bg-[#419bff] px-3.5 text-[11px] font-semibold text-white shadow-[0_7px_16px_rgba(65,155,255,0.2)] hover:bg-[#2582ea]"
               onClick={handleUpdateCategory}
               disabled={updateCategoryMutation.isPending}
             >

@@ -83,9 +83,8 @@ export const zhCN: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "你好，欢迎回来！",
-    description:
-      "欢迎使用易信Trade AI。通过内置和自定义技能，\n易信Trade AI 可以帮你搜索网络、分析数据，还能生成幻灯片、\n图片、视频、播客及网页等内容。",
+    greeting: "Hi～ 今天有什么可以帮到你？",
+    description: "企业级金融专业、安全、高效智能伙伴",
 
     createYourOwnSkill: "创建你自己的 Agent SKill",
     createYourOwnSkillDescription:
@@ -283,8 +282,8 @@ export const zhCN: Translations = {
     channels: "渠道",
     recentChats: "最近的对话",
     demoChats: "演示对话",
-    agents: "智能体",
-    scheduledTasks: "定时任务",
+    agents: "专家",
+    scheduledTasks: "任务",
     agentsDisabledTooltip: "功能未启用",
   },
 

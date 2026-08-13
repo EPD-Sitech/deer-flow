@@ -1,7 +1,9 @@
 "use client";
 
 import { LoaderIcon, PuzzleIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +54,7 @@ export function SkillDetailDialog({
   open,
   onOpenChange,
 }: SkillDetailDialogProps) {
+  const router = useRouter();
   const contentQuery = useCustomSkillContent(
     open && skill.editable ? skill.name : null,
   );
@@ -79,14 +82,28 @@ export function SkillDetailDialog({
               技能元数据与配置信息
             </DialogDescription>
           </div>
-          <button
-            type="button"
-            className="ml-auto grid size-7 shrink-0 cursor-pointer place-items-center rounded-[7px] text-lg leading-none text-[#8b9cad] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            aria-label="关闭"
-            onClick={() => onOpenChange(false)}
-          >
-            ×
-          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Button
+              size="sm"
+              className="h-7 rounded-[7px] bg-[linear-gradient(145deg,#2587ea,#419bff)] px-3 text-[11px] text-white shadow-[0_6px_14px_rgba(37,130,234,0.22)] hover:opacity-95"
+              onClick={() => {
+                onOpenChange(false);
+                void router.push(
+                  `/workspace/chats/new?skill=${encodeURIComponent(skill.name)}`,
+                );
+              }}
+            >
+              去试试
+            </Button>
+            <button
+              type="button"
+              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-[7px] text-lg leading-none text-[#8b9cad] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              aria-label="关闭"
+              onClick={() => onOpenChange(false)}
+            >
+              ×
+            </button>
+          </div>
         </header>
 
         <div className="max-h-[calc(100dvh-260px)] overflow-auto bg-[#f7fafd] px-6 pt-4 pb-6 dark:bg-slate-950/80">

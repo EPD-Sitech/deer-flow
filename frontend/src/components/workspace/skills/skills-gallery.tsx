@@ -152,14 +152,14 @@ export function SkillsGallery() {
   return (
     <div className="flex size-full flex-col">
       {/* 页面头部 */}
-      <div className="shrink-0 border-b border-[color:var(--gp-border)] bg-[var(--gp-surface-from)]">
+      <div className="shrink-0 border-b border-border bg-[var(--gp-surface-from)]">
         <header className="flex flex-col gap-4 px-5 py-4 sm:px-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h1 className="text-[24px] leading-tight font-semibold text-[#173a5b] dark:text-slate-100">
-              {t.settings.skills.title}
+              推荐技能
             </h1>
             <p className="mt-1 text-sm text-[#71869a] dark:text-slate-400">
-              {t.settings.skills.description}
+              试试推荐业务技能与能力
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
@@ -256,7 +256,7 @@ export function SkillsGallery() {
 
       {/* 批量操作工具栏 */}
       {selectedSkills.size > 0 && (
-        <div className="flex items-center gap-3 border-b border-[color:var(--gp-border)] bg-[var(--gp-surface-from)] px-5 py-2 sm:px-6">
+        <div className="flex items-center gap-3 border-b border-border bg-[var(--gp-surface-from)] px-5 py-2 sm:px-6">
           <span className="text-text-secondary text-sm font-medium">
             已选择 {selectedSkills.size} 个
           </span>

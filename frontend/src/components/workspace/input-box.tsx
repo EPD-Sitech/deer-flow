@@ -766,6 +766,25 @@ export function InputBox({
     textInput.value,
   ]);
 
+  // Select a skill passed via ?skill=<name> (skills gallery "去试试" button):
+  // jump to the new-chat page with the skill pre-selected in the input box.
+  const skillParam = searchParams.get("skill");
+  useEffect(() => {
+    if (!skillParam || skillsLoading || selectedSlashSkill || hydratedDraftKey) {
+      return;
+    }
+    const skill = skills.find(
+      (item) => item.name === skillParam && item.enabled,
+    );
+    if (skill) {
+      setSelectedSlashSkill({
+        name: skill.name,
+        description: skill.description,
+        kind: "skill",
+      });
+    }
+  }, [skillParam, skills, skillsLoading, selectedSlashSkill, hydratedDraftKey]);
+
   useEffect(() => {
     if (hydratedDraftKey !== draftKey) {
       return;

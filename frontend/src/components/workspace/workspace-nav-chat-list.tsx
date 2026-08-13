@@ -77,6 +77,17 @@ export function WorkspaceNavChatList() {
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
+            isActive={pathname.startsWith("/workspace/skills")}
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/skills">
+              <PuzzleIcon />
+              <span>{t.settings.skills.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
             isActive={pathname.startsWith("/workspace/scheduled-tasks")}
             asChild
           >
@@ -86,17 +97,6 @@ export function WorkspaceNavChatList() {
             >
               <CalendarClock />
               <span>{t.sidebar.scheduledTasks}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname.startsWith("/workspace/skills")}
-            asChild
-          >
-            <Link className="text-muted-foreground" href="/workspace/skills">
-              <PuzzleIcon />
-              <span>{t.settings.skills.title}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

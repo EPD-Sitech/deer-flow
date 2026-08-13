@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 import tempfile
 import zipfile
 from datetime import UTC, datetime
@@ -35,6 +36,7 @@ from app.gateway.skills_metadata import (
     get_skill_metadata_entry,
     normalize_skill_category,
     normalize_skill_tags,
+    request_is_admin,
     save_skill_metadata_entry,
     skill_to_response_dict,
 )
@@ -81,10 +83,18 @@ def _ensure_skill_exists(config: AppConfig, skill_name: str) -> Any:
     return skill
 
 
-def _ensure_manageable(skill: Any) -> None:
-    """Only user-scoped CUSTOM skills may be mutated/deleted."""
-    if skill.category != SkillCategory.CUSTOM:
-        raise HTTPException(status_code=403, detail="Only custom skills can be managed")
+def _ensure_manageable(skill: Any, request: Request) -> None:
+    """Only user-scoped CUSTOM skills may be mutated/deleted.
+
+    Admins may also manage public/legacy skills (harness behaviour: the
+    ``_ensure_can_manage_skill`` guard lets admins through).
+    """
+    if skill.category == SkillCategory.CUSTOM:
+        return
+    user = getattr(getattr(request, "state", None), "user", None)
+    if getattr(user, "system_role", None) == "admin":
+        return
+    raise HTTPException(status_code=403, detail="Only custom skills can be managed")
 
 
 def _safe_skill_name(skill_name: str) -> str:
@@ -208,7 +218,7 @@ async def update_skill_category(
     await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
     skill_name = _safe_skill_name(skill_name)
     skill = _ensure_skill_exists(config, skill_name)
-    _ensure_manageable(skill)
+    _ensure_manageable(skill, request)
 
     display_name = body.display_name.strip() if body.display_name is not None else None
     if display_name is not None and not display_name:
@@ -220,10 +230,18 @@ async def update_skill_category(
     entry["tags"] = normalize_skill_tags(body.tags)
     save_skill_metadata_entry(skill.name, entry)
 
-    return skill_to_response_dict(skill)
+    return skill_to_response_dict(skill, is_admin=request_is_admin(request))
 
 
 # ── Delete ───────────────────────────────────────────────────────────────────
+
+
+async def _delete_public_skill_dir(skill: Any) -> None:
+    """Remove a public/legacy skill's directory on disk (admin operation)."""
+    skill_dir = getattr(skill, "skill_dir", None)
+    if skill_dir is None or not skill_dir.exists():
+        raise FileNotFoundError(f"Skill directory for '{skill.name}' not found")
+    await asyncio.to_thread(shutil.rmtree, skill_dir)
 
 
 @router.delete("/skills/{skill_name}", response_model=SkillDeleteResponse, summary="Delete Skill")
@@ -235,23 +253,27 @@ async def delete_skill(
     await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
     skill_name = _safe_skill_name(skill_name)
     skill = _ensure_skill_exists(config, skill_name)
-    _ensure_manageable(skill)
+    _ensure_manageable(skill, request)
 
     storage = _get_storage(config)
     try:
-        await asyncio.to_thread(
-            storage.delete_custom_skill,
-            skill.name,
-            history_meta={
-                "action": "human_delete",
-                "author": "human",
-                "thread_id": None,
-                "file_path": SKILL_MD_FILE,
-                "prev_content": None,
-                "new_content": None,
-                "scanner": {"decision": "allow", "reason": "Deletion requested."},
-            },
-        )
+        if skill.category == SkillCategory.CUSTOM:
+            await asyncio.to_thread(
+                storage.delete_custom_skill,
+                skill.name,
+                history_meta={
+                    "action": "human_delete",
+                    "author": "human",
+                    "thread_id": None,
+                    "file_path": SKILL_MD_FILE,
+                    "prev_content": None,
+                    "new_content": None,
+                    "scanner": {"decision": "allow", "reason": "Deletion requested."},
+                },
+            )
+        else:
+            # Admin deleting a public/legacy skill — remove its directory.
+            await _delete_public_skill_dir(skill)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -279,11 +301,15 @@ async def batch_delete_skills(
         if skill is None:
             failed.append(SkillBatchDeleteItem(skill_name=safe_name, detail="Skill not found"))
             continue
-        if skill.category != SkillCategory.CUSTOM:
+        if skill.category != SkillCategory.CUSTOM and not request_is_admin(request):
             failed.append(SkillBatchDeleteItem(skill_name=safe_name, detail="Only custom skills can be deleted"))
             continue
         try:
-            await asyncio.to_thread(storage.delete_custom_skill, safe_name)
+            if skill.category == SkillCategory.CUSTOM:
+                await asyncio.to_thread(storage.delete_custom_skill, safe_name)
+            else:
+                # Admin batch-deleting public/legacy skills — remove their directories.
+                await _delete_public_skill_dir(skill)
             delete_skill_metadata_entry(safe_name)
             deleted.append(safe_name)
         except Exception as e:

@@ -61,13 +61,17 @@ export function LocalAgentGallery() {
   const text = locale.startsWith("zh")
     ? {
         title: "召唤专家",
-        search: "搜索智能体、能力或业务场景",
+        description: "召唤你的专属业务专家伙伴",
+        search: "搜索专家或描述",
+        create: "新建专家",
         count: (count: number) => `${count} 位专家`,
         loadError: "智能体加载失败，请稍后重试。",
       }
     : {
         title: "Local agents",
+        description: "Call on your dedicated business expert partners",
         search: "Search agents, capabilities, or use cases",
+        create: "New expert",
         count: (count: number) => `${count} specialists`,
         loadError: "Agents could not be loaded. Try again later.",
       };
@@ -191,7 +195,7 @@ export function LocalAgentGallery() {
               {text.title}
             </h1>
             <p className="mt-1 text-sm text-[#71869a] dark:text-slate-400">
-              {t.agents.description}
+              {text.description}
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
@@ -217,7 +221,7 @@ export function LocalAgentGallery() {
               onClick={() => router.push("/workspace/agents/new")}
             >
               <PlusIcon className="mr-1.5 size-3.5" />
-              {t.agents.newAgent}
+              {text.create}
             </Button>
           </div>
         </header>
@@ -339,7 +343,7 @@ export function LocalAgentGallery() {
               onClick={() => router.push("/workspace/agents/new")}
             >
               <PlusIcon className="mr-1.5 size-4" />
-              {t.agents.newAgent}
+              {text.create}
             </Button>
           </div>
         ) : (

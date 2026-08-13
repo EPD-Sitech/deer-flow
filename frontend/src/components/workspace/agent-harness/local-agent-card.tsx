@@ -15,7 +15,13 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type CSSProperties } from "react";
+import {
+  useMemo,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -54,6 +60,7 @@ import {
   getLocalAgentCategoryLabel,
 } from "./local-agent-categories";
 import { LocalAgentDetailDialog } from "./local-agent-detail-dialog";
+import { LocalAgentOverviewDialog } from "./local-agent-overview-dialog";
 import { LocalAgentShareDialog } from "./local-agent-share-dialog";
 
 const CATEGORY_COLORS = {
@@ -86,6 +93,7 @@ export function LocalAgentCard({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"files" | "schedules">("files");
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -97,8 +105,7 @@ export function LocalAgentCard({
   const scope: AgentScope =
     "scope" in agent && agent.scope === "platform" ? "platform" : "user";
   const isPlatform = scope === "platform";
-  const runtimeName =
-    "runtime_name" in agent ? agent.runtime_name : agent.name;
+  const runtimeName = "runtime_name" in agent ? agent.runtime_name : agent.name;
   const [cloneName, setCloneName] = useState(`${runtimeName}-copy`);
   const canManage = !("can_manage" in agent) || agent.can_manage;
   const canViewDetails =
@@ -110,7 +117,8 @@ export function LocalAgentCard({
   const canExport = !("can_export" in agent) || agent.can_export;
   const canClone = !("can_clone" in agent) || agent.can_clone;
   const canShare = !("can_share" in agent) || agent.can_share;
-  const hasActions = canViewDetails || canManage || canExport || canClone;
+  const hasActions =
+    canManage || canExport || canClone || canShare || canEdit || canDelete;
   const scopeLabel =
     "scope" in agent && agent.scope === "platform"
       ? locale.startsWith("zh")
@@ -134,12 +142,10 @@ export function LocalAgentCard({
       };
   const displayTags = useMemo(
     () =>
-      Array.from(
-        new Set([
-          categoryLabel,
-          ...(agent.tool_groups ?? []),
-        ]),
-      ).slice(0, 3),
+      Array.from(new Set([categoryLabel, ...(agent.tool_groups ?? [])])).slice(
+        0,
+        3,
+      ),
     [agent.tool_groups, categoryLabel],
   );
 
@@ -147,6 +153,32 @@ export function LocalAgentCard({
     router.push(
       `/workspace/agents/${encodeURIComponent(runtimeName)}/chats/new`,
     );
+  }
+
+  function handleOverviewChat(prompt?: string) {
+    const query = prompt ? `?prompt=${encodeURIComponent(prompt)}` : "";
+    router.push(
+      `/workspace/agents/${encodeURIComponent(runtimeName)}/chats/new${query}`,
+    );
+  }
+
+  function handleCardClick(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("button, input, a, [role='menuitem']")
+    ) {
+      return;
+    }
+    if (canViewDetails) setOverviewOpen(true);
+  }
+
+  function handleCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (canViewDetails) setOverviewOpen(true);
+    }
   }
 
   async function handleDelete() {
@@ -196,7 +228,11 @@ export function LocalAgentCard({
   return (
     <>
       <Card
-        className={`group relative h-44 min-w-0 gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] ${selected ? "ring-2 ring-sky-400" : ""}`}
+        className={`group relative h-44 min-w-0 cursor-pointer gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] ${selected ? "ring-2 ring-sky-400" : ""}`}
+        role={canViewDetails ? "button" : undefined}
+        tabIndex={canViewDetails ? 0 : undefined}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
         style={
           {
             "--local-agent-accent": colors.accent,
@@ -212,6 +248,7 @@ export function LocalAgentCard({
               onChange={onToggleSelect}
               aria-label={`${locale.startsWith("zh") ? "选择" : "Select"} ${agent.name}`}
               className={`absolute top-3 right-10 z-10 size-4 cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+              onClick={(event) => event.stopPropagation()}
             />
           )}
           <div className="flex min-w-0 items-center gap-2.5 pr-8">
@@ -251,7 +288,10 @@ export function LocalAgentCard({
           <Button
             size="sm"
             className="absolute right-3 bottom-3 size-8 rounded-lg bg-[#2587ea] p-0 text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] transition-transform hover:-translate-y-0.5 hover:bg-[#1778d8]"
-            onClick={handleChat}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleChat();
+            }}
             title={text.chatWith}
           >
             <MessageSquareIcon className="size-3.5" />
@@ -266,6 +306,7 @@ export function LocalAgentCard({
                   className="absolute top-2.5 right-2.5 inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#7b91a5] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
                   aria-label={`${agent.name}: ${text.more}`}
                   title={text.more}
+                  onClick={(event) => event.stopPropagation()}
                 >
                   <MoreHorizontalIcon className="size-4" />
                 </button>
@@ -381,6 +422,20 @@ export function LocalAgentCard({
           agent={agent}
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
+        />
+      )}
+
+      {overviewOpen && (
+        <LocalAgentOverviewDialog
+          agent={agent}
+          open={overviewOpen}
+          onOpenChange={setOverviewOpen}
+          scope={scope}
+          accent={colors.accent}
+          tint={colors.tint}
+          categoryLabel={categoryLabel}
+          capabilities={displayTags}
+          onStartChat={handleOverviewChat}
         />
       )}
 

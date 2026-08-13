@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { BotIcon, PlusSquare } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -64,6 +64,8 @@ import { cn } from "@/lib/utils";
 export default function AgentChatPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialPrompt = searchParams.get("prompt") ?? undefined;
 
   const { agent_name } = useParams<{
     agent_name: string;
@@ -422,6 +424,7 @@ export default function AgentChatPage() {
                       threadId={threadId}
                       draftThreadId={isNewThread ? "new" : threadId}
                       draftAgentName={agent_name}
+                      initialValue={initialPrompt}
                       defaultModelName={agent?.model}
                       autoFocus={isWelcomeMode}
                       status={

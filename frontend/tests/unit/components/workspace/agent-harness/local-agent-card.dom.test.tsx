@@ -102,10 +102,18 @@ describe("LocalAgentCard management menu", () => {
       can_clone: false,
       can_share: false,
       can_batch: false,
+      guide_questions: [
+        { question: "学习", prompt: "请帮我制定学习计划" },
+        { question: "岗位职责" },
+        { question: "什么是真需求" },
+        { question: "这条不应展示" },
+      ],
     });
-    await openMenu("public-report-agent");
-
-    expect(screen.getByText("查看详情")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "public-report-agent: 更多操作",
+      }),
+    ).toBeNull();
     expect(screen.queryByText("克隆")).toBeNull();
     expect(screen.queryByText("导出 ZIP")).toBeNull();
     expect(screen.queryByText("导出 Markdown")).toBeNull();
@@ -114,6 +122,24 @@ describe("LocalAgentCard management menu", () => {
     expect(screen.queryByText("定时任务")).toBeNull();
     expect(screen.queryByText("模型设置")).toBeNull();
     expect(screen.queryByText("删除")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /public-report-agent/ }),
+    );
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("专家简介")).toBeTruthy();
+    expect(screen.getByText("核心能力")).toBeTruthy();
+    expect(screen.getByText("可以这样问")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "学习" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "岗位职责" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "什么是真需求" })).toBeTruthy();
+    expect(screen.queryByText("这条不应展示")).toBeNull();
+    expect(screen.queryByText("配置与角色")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "学习" }));
+    expect(navigation.push).toHaveBeenCalledWith(
+      "/workspace/agents/public-report-agent/chats/new?prompt=%E8%AF%B7%E5%B8%AE%E6%88%91%E5%88%B6%E5%AE%9A%E5%AD%A6%E4%B9%A0%E8%AE%A1%E5%88%92",
+    );
   });
 
   it("shows public Agent management actions to administrators", async () => {
@@ -169,8 +195,11 @@ describe("LocalAgentCard management menu", () => {
       "/workspace/agents/agent-0123456789abcdef/chats/new",
     );
 
-    await openMenu("ai产品经理培训答疑");
-    expect(screen.getByRole("menuitem", { name: "查看详情" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "ai产品经理培训答疑: 更多操作",
+      }),
+    ).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "克隆" })).toBeNull();
   });
 });

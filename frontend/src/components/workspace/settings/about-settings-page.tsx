@@ -2,8 +2,8 @@
 
 import { SafeStreamdown } from "@/core/streamdown/components";
 
-import { aboutMarkdown } from "./about-content";
+import { brandedAboutMarkdown } from "./branded-about-content";
 
 export function AboutSettingsPage() {
-  return <SafeStreamdown>{aboutMarkdown}</SafeStreamdown>;
+  return <SafeStreamdown>{brandedAboutMarkdown}</SafeStreamdown>;
 }

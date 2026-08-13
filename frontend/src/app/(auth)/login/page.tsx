@@ -213,7 +213,9 @@ export default function LoginPage() {
       />
       <div className="border-border/20 bg-background/5 w-full max-w-md space-y-6 rounded-3xl border p-8 backdrop-blur-sm">
         <div className="text-center">
-          <h1 className="text-foreground font-serif text-3xl">DeerFlow</h1>
+          <h1 className="text-foreground text-3xl font-semibold">
+            易信Trade AI
+          </h1>
           <p className="text-muted-foreground mt-2">
             {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
           </p>
@@ -339,13 +341,11 @@ export default function LoginPage() {
                   if (provider.type === "cas") {
                     void fetch("/api/v1/auth/cas/login")
                       .then((resp) => (resp.ok ? resp.json() : null))
-                      .then(
-                        (data: { loginUrl?: string } | null) => {
-                          if (data?.loginUrl) {
-                            window.location.href = data.loginUrl;
-                          }
-                        },
-                      )
+                      .then((data: { loginUrl?: string } | null) => {
+                        if (data?.loginUrl) {
+                          window.location.href = data.loginUrl;
+                        }
+                      })
                       .catch(() => undefined);
                     return;
                   }

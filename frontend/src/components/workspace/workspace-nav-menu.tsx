@@ -25,6 +25,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 
 import { GithubIcon } from "./github-icon";
@@ -55,6 +56,8 @@ export function WorkspaceNavMenu() {
   const [mounted, setMounted] = useState(false);
   const { open: isSidebarOpen } = useSidebar();
   const { t } = useI18n();
+  const { user } = useAuth();
+  const isAdmin = user?.system_role === "admin";
 
   useEffect(() => {
     setMounted(true);
@@ -88,54 +91,62 @@ export function WorkspaceNavMenu() {
                     <Settings2Icon />
                     {t.common.settings}
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <a
-                    href="https://deerflow.tech/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <DropdownMenuItem>
-                      <GlobeIcon />
-                      {t.workspace.officialWebsite}
-                    </DropdownMenuItem>
-                  </a>
-                  <a
-                    href="https://github.com/bytedance/deer-flow"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <DropdownMenuItem>
-                      <GithubIcon />
-                      {t.workspace.visitGithub}
-                    </DropdownMenuItem>
-                  </a>
-                  <DropdownMenuSeparator />
-                  <a
-                    href="https://github.com/bytedance/deer-flow/issues"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <DropdownMenuItem>
-                      <BugIcon />
-                      {t.workspace.reportIssue}
-                    </DropdownMenuItem>
-                  </a>
-                  <a href="mailto:support@deerflow.tech">
-                    <DropdownMenuItem>
-                      <MailIcon />
-                      {t.workspace.contactUs}
-                    </DropdownMenuItem>
-                  </a>
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <a
+                        href="https://deerflow.tech/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <DropdownMenuItem>
+                          <GlobeIcon />
+                          官方网站
+                        </DropdownMenuItem>
+                      </a>
+                      <a
+                        href="https://github.com/bytedance/deer-flow"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <DropdownMenuItem>
+                          <GithubIcon />
+                          开源项目
+                        </DropdownMenuItem>
+                      </a>
+                      <DropdownMenuSeparator />
+                      <a
+                        href="https://github.com/bytedance/deer-flow/issues"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <DropdownMenuItem>
+                          <BugIcon />
+                          {t.workspace.reportIssue}
+                        </DropdownMenuItem>
+                      </a>
+                      <a href="mailto:support@deerflow.tech">
+                        <DropdownMenuItem>
+                          <MailIcon />
+                          {t.workspace.contactUs}
+                        </DropdownMenuItem>
+                      </a>
+                    </>
+                  )}
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    openSettings("about");
-                  }}
-                >
-                  <InfoIcon />
-                  {t.workspace.about}
-                </DropdownMenuItem>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        openSettings("about");
+                      }}
+                    >
+                      <InfoIcon />
+                      关于系统
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (

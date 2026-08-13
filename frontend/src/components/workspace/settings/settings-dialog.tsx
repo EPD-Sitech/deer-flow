@@ -21,8 +21,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+
+import {
+  getVisibleSettingsSections,
+  resolveVisibleSettingsSection,
+  type SettingsSection,
+} from "./settings-access";
 
 function SettingsPageLoading() {
   return (
@@ -90,16 +97,7 @@ const AboutSettingsPage = dynamic(
   { loading: SettingsPageLoading },
 );
 
-export type SettingsSection =
-  | "account"
-  | "appearance"
-  | "channels"
-  | "integrations"
-  | "memory"
-  | "tools"
-  | "skills"
-  | "notification"
-  | "about";
+export type { SettingsSection } from "./settings-access";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -108,19 +106,22 @@ type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
 export function SettingsDialog(props: SettingsDialogProps) {
   const { defaultSection = "appearance", ...dialogProps } = props;
   const { t } = useI18n();
-  const [activeSection, setActiveSection] =
-    useState<SettingsSection>(defaultSection);
+  const { user } = useAuth();
+  const isAdmin = user?.system_role === "admin";
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() =>
+    resolveVisibleSettingsSection(defaultSection, isAdmin),
+  );
 
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
     // This allows triggers like "About" to open the dialog directly on that page.
     if (dialogProps.open) {
-      setActiveSection(defaultSection);
+      setActiveSection(resolveVisibleSettingsSection(defaultSection, isAdmin));
     }
-  }, [defaultSection, dialogProps.open]);
+  }, [defaultSection, dialogProps.open, isAdmin]);
 
-  const sections = useMemo(
-    () => [
+  const sections = useMemo(() => {
+    const allSections = [
       {
         id: "account",
         label: t.settings.sections.account,
@@ -154,19 +155,23 @@ export function SettingsDialog(props: SettingsDialogProps) {
       { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
       { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
       { id: "about", label: t.settings.sections.about, icon: InfoIcon },
-    ],
-    [
-      t.settings.sections.account,
-      t.settings.sections.appearance,
-      t.settings.sections.channels,
-      t.settings.sections.integrations,
-      t.settings.sections.memory,
-      t.settings.sections.tools,
-      t.settings.sections.skills,
-      t.settings.sections.notification,
-      t.settings.sections.about,
-    ],
-  );
+    ] as const;
+    const visibleSections = getVisibleSettingsSections(isAdmin);
+    return visibleSections
+      ? allSections.filter(({ id }) => visibleSections.includes(id))
+      : allSections;
+  }, [
+    isAdmin,
+    t.settings.sections.account,
+    t.settings.sections.appearance,
+    t.settings.sections.channels,
+    t.settings.sections.integrations,
+    t.settings.sections.memory,
+    t.settings.sections.tools,
+    t.settings.sections.skills,
+    t.settings.sections.notification,
+    t.settings.sections.about,
+  ]);
   return (
     <Dialog
       {...dialogProps}

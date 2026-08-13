@@ -114,6 +114,7 @@ describe("LocalAgentGallery", () => {
     renderGallery();
 
     expect(screen.getByText("召唤专家")).toBeTruthy();
+    expect(screen.getByText("召唤你的专属业务专家伙伴")).toBeTruthy();
     expect(await screen.findByText("sql-analyst")).toBeTruthy();
     expect(await screen.findByText("meeting-assistant")).toBeTruthy();
     expect(screen.getByRole("button", { name: "导入" })).toBeTruthy();
@@ -128,12 +129,9 @@ describe("LocalAgentGallery", () => {
 
     await screen.findByText("sql-analyst");
 
-    fireEvent.change(
-      screen.getByPlaceholderText("搜索智能体、能力或业务场景"),
-      {
-        target: { value: "meeting" },
-      },
-    );
+    fireEvent.change(screen.getByPlaceholderText("搜索专家或描述"), {
+      target: { value: "meeting" },
+    });
 
     expect(screen.queryByText("sql-analyst")).toBeNull();
     expect(screen.getByText("meeting-assistant")).toBeTruthy();

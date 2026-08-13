@@ -68,8 +68,8 @@ export function WhatsNewSection({ className }: { className?: string }) {
   return (
     <Section
       className={cn("", className)}
-      title="Whats New in DeerFlow 2.0"
-      subtitle="DeerFlow is now evolving from a Deep Research agent into a full-stack Super Agent"
+      title="Whats New in 易信Trade AI"
+      subtitle="易信Trade AI is evolving into a full-stack Super Agent"
     >
       <div
         ref={bentoContainerRef}

@@ -9,7 +9,11 @@ from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_config, require_admin_user
 from app.gateway.path_utils import resolve_thread_virtual_path
-from app.gateway.skills_metadata import SKILL_CATEGORY_DEFINITIONS, skill_to_response_dict
+from app.gateway.skills_metadata import (
+    SKILL_CATEGORY_DEFINITIONS,
+    request_is_admin,
+    skill_to_response_dict,
+)
 from deerflow.agents.lead_agent.prompt import clear_skills_system_prompt_cache, refresh_skills_system_prompt_cache_async, refresh_user_skills_system_prompt_cache_async
 from deerflow.config.app_config import AppConfig
 from deerflow.config.extensions_config import (
@@ -115,9 +119,9 @@ class SkillRollbackRequest(BaseModel):
     history_index: int = Field(default=-1, description="History entry index to restore from, defaulting to the latest change.")
 
 
-def _skill_to_response(skill: Skill) -> SkillResponse:
+def _skill_to_response(skill: Skill, *, is_admin: bool = False) -> SkillResponse:
     """Convert a Skill object to a SkillResponse (merging stored business metadata)."""
-    return SkillResponse(**skill_to_response_dict(skill))
+    return SkillResponse(**skill_to_response_dict(skill, is_admin=is_admin))
 
 
 def _static_scan_http_detail(error: StaticScanBlockedError) -> dict:
@@ -159,11 +163,17 @@ def _get_user_skill_storage(config: AppConfig) -> SkillStorage:
     summary="List All Skills",
     description="Retrieve a list of all available skills from both public and custom directories.",
 )
-async def list_skills(config: AppConfig = Depends(get_config)) -> SkillsListResponse:
+async def list_skills(
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillsListResponse:
     try:
         # Use user-scoped storage: loads public (global) + custom (user-level + fallback)
         skills = _get_user_skill_storage(config).load_skills(enabled_only=False)
-        return SkillsListResponse(skills=[_skill_to_response(skill) for skill in skills])
+        is_admin = request_is_admin(request)
+        return SkillsListResponse(
+            skills=[_skill_to_response(skill, is_admin=is_admin) for skill in skills]
+        )
     except Exception as e:
         logger.error(f"Failed to load skills: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load skills: {str(e)}")
@@ -459,7 +469,11 @@ async def list_skill_categories(config: AppConfig = Depends(get_config)) -> Skil
     summary="Get Skill Details",
     description="Retrieve detailed information about a specific skill by its name.",
 )
-async def get_skill(skill_name: str, config: AppConfig = Depends(get_config)) -> SkillResponse:
+async def get_skill(
+    skill_name: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillResponse:
     try:
         skill_name = skill_name.replace("\r\n", "").replace("\n", "")
         skills = _get_user_skill_storage(config).load_skills(enabled_only=False)
@@ -468,7 +482,7 @@ async def get_skill(skill_name: str, config: AppConfig = Depends(get_config)) ->
         if skill is None:
             raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
-        return _skill_to_response(skill)
+        return _skill_to_response(skill, is_admin=request_is_admin(request))
     except HTTPException:
         raise
     except Exception as e:

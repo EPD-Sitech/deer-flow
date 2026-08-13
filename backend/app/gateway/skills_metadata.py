@@ -125,11 +125,23 @@ def delete_skill_metadata_entry(skill_name: str, user_id: str | None = None) -> 
                 pass
 
 
-def skill_to_response_dict(skill: Any) -> dict[str, Any]:
+def request_is_admin(request: Any) -> bool:
+    """True when the authenticated caller is an admin.
+
+    ``AuthMiddleware`` stamps ``request.state.user`` before a route runs, so
+    routes that are not themselves admin-gated can still determine the role.
+    """
+    user = getattr(getattr(request, "state", None), "user", None)
+    return getattr(user, "system_role", None) == "admin"
+
+
+def skill_to_response_dict(skill: Any, *, is_admin: bool = False) -> dict[str, Any]:
     """Build the full frontend-facing skill dict, merging stored metadata.
 
     Mirrors the harness ``SkillResponse`` shape: base fields plus optional
     business metadata (Chinese display name/description, category, tags).
+    Admins may manage public skills too (``can_manage`` = True for every
+    skill when ``is_admin`` is set).
     """
     entry = get_skill_metadata_entry(skill.name) or {}
 
@@ -168,7 +180,7 @@ def skill_to_response_dict(skill: Any) -> dict[str, Any]:
         "capabilities": entry.get("capabilities") or None,
         "recommended_scenarios": entry.get("recommended_scenarios") or None,
         "scope": scope,
-        "can_manage": skill.category == SkillCategory.CUSTOM,
+        "can_manage": skill.category == SkillCategory.CUSTOM or is_admin,
     }
 
 

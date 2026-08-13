@@ -9,12 +9,12 @@ import type { AgentGuideQuestion } from "./guide-questions";
 export function LocalAgentGuideQuestions({
   className,
   questions,
-  onSubmit,
+  onSelect,
   disabled = false,
 }: {
   className?: string;
   questions: AgentGuideQuestion[];
-  onSubmit: (prompt: string) => void;
+  onSelect: (prompt: string) => void;
   disabled?: boolean;
 }) {
   if (questions.length === 0) return null;
@@ -31,7 +31,7 @@ export function LocalAgentGuideQuestions({
             type="button"
             className="border-border bg-background text-muted-foreground hover:border-primary/35 hover:bg-accent/50 hover:text-foreground group flex min-h-[52px] w-full cursor-pointer items-center gap-2 rounded-md border px-3.5 py-2.5 text-left text-xs leading-5 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             disabled={disabled}
-            onClick={() => onSubmit(item.prompt ?? item.question)}
+            onClick={() => onSelect(item.prompt ?? item.question)}
           >
             <MessageCircleQuestionIcon className="text-primary size-3.5 shrink-0" />
             <span className="min-w-0 flex-1">{item.question}</span>

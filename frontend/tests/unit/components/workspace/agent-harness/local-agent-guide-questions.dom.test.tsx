@@ -4,13 +4,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { LocalAgentGuideQuestions } from "@/components/workspace/agent-harness/local-agent-guide-questions";
 
 describe("LocalAgentGuideQuestions", () => {
-  it("renders the shared question layout and submits the configured prompt", () => {
-    const onSubmit = rs.fn();
+  it("renders the shared question layout and selects the configured prompt", () => {
+    const onSelect = rs.fn();
     render(
       <LocalAgentGuideQuestions
         className="absolute top-full right-0 left-0"
         questions={[{ question: "帮我分析报告", prompt: "分析附件中的报告" }]}
-        onSubmit={onSubmit}
+        onSelect={onSelect}
       />,
     );
 
@@ -19,6 +19,6 @@ describe("LocalAgentGuideQuestions", () => {
       "absolute top-full",
     );
     fireEvent.click(screen.getByRole("button", { name: "帮我分析报告" }));
-    expect(onSubmit).toHaveBeenCalledWith("分析附件中的报告");
+    expect(onSelect).toHaveBeenCalledWith("分析附件中的报告");
   });
 });

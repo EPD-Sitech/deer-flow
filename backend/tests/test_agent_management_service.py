@@ -177,6 +177,33 @@ def test_admin_can_manage_and_preserve_guide_questions(service: AgentManagementS
     assert exported_config["ui"] == updated["ui"]
 
 
+def test_separate_guide_questions_override_stale_config_yaml_and_persist(
+    service: AgentManagementService,
+) -> None:
+    updated = service.update_files(
+        "writer",
+        config_yaml=yaml.safe_dump(
+            {
+                "name": "writer",
+                "description": "Writes concise reports",
+                "skills": ["research"],
+                "ui": {"guide_questions": []},
+            },
+            allow_unicode=True,
+        ),
+        guide_questions=[{"question": "帮我分析市场", "prompt": "分析以下市场数据"}],
+    )
+
+    reloaded_service = AgentManagementService(
+        store=service.store,
+        user_id="alice",
+        state_dir=service.state_dir,
+    )
+
+    assert updated["ui"]["guide_questions"] == [{"question": "帮我分析市场", "prompt": "分析以下市场数据"}]
+    assert reloaded_service.describe("writer")["ui"]["guide_questions"] == updated["ui"]["guide_questions"]
+
+
 def test_non_admin_cannot_change_guide_questions(service: AgentManagementService) -> None:
     service.can_edit_guide_questions = False
     config = yaml.safe_dump(
@@ -399,12 +426,19 @@ def test_platform_agent_store_supports_admin_managed_files(tmp_path: Path) -> No
 
     updated = service.update_files(
         "public-researcher",
-        config_yaml="name: public-researcher\ndescription: Updated public Agent\n",
+        config_yaml=("name: public-researcher\ndescription: Updated public Agent\nui:\n  guide_questions: []\n"),
         soul="# Updated public researcher",
+        guide_questions=[{"question": "分析这份研报", "prompt": "请分析以下研报"}],
+    )
+    reloaded_service = AgentManagementService(
+        store=PlatformAgentStore(paths),
+        user_id="admin",
+        state_dir=tmp_path / "admin",
     )
 
     assert updated["description"] == "Updated public Agent"
     assert service.store.get_soul("public-researcher", user_id="admin") == "# Updated public researcher"
+    assert reloaded_service.describe("public-researcher")["ui"]["guide_questions"] == [{"question": "分析这份研报", "prompt": "请分析以下研报"}]
 
 
 def test_public_sharing_resolves_platform_agents(service: AgentManagementService, tmp_path: Path) -> None:

@@ -5,7 +5,10 @@ import { BotIcon, PlusSquare } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import {
+  type PromptInputMessage,
+  usePromptInputController,
+} from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { listAgentCatalog } from "@/components/workspace/agent-harness/agent-management-api";
@@ -63,6 +66,7 @@ import { cn } from "@/lib/utils";
 
 export default function AgentChatPage() {
   const { t } = useI18n();
+  const { textInput } = usePromptInputController();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialPrompt = searchParams.get("prompt") ?? undefined;
@@ -462,10 +466,7 @@ export default function AgentChatPage() {
                       <LocalAgentGuideQuestions
                         className="absolute top-full right-0 left-0"
                         questions={guideQuestions}
-                        onSubmit={(prompt) => {
-                          setIsWelcomeMode(false);
-                          void handleSubmit({ text: prompt, files: [] });
-                        }}
+                        onSelect={textInput.setInput}
                       />
                     )}
                   {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" && (

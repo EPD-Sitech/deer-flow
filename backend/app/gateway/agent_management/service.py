@@ -136,7 +136,7 @@ class AgentManagementService:
                 raise ValueError(f"config_yaml name '{config_name}' does not match agent '{normalized}'")
             validated = AgentConfig(**loaded)
             config_document = _config_document(validated, name=normalized)
-            guide_questions = validate_guide_questions(loaded)
+            config_guide_questions = validate_guide_questions(loaded)
             current_questions = validate_guide_questions(
                 read_raw_config(
                     self.store,
@@ -145,10 +145,10 @@ class AgentManagementService:
                     state_dir=self.state_dir,
                 )
             )
-            if not self.can_edit_guide_questions and guide_questions != current_questions:
+            if guide_questions is None and not self.can_edit_guide_questions and config_guide_questions != current_questions:
                 raise PermissionError("Only administrators can manage Agent guide questions")
             if "ui" in loaded:
-                config_document["ui"] = {"guide_questions": guide_questions}
+                config_document["ui"] = {"guide_questions": config_guide_questions}
             elif current_questions:
                 config_document["ui"] = {"guide_questions": current_questions}
         if guide_questions is not None:

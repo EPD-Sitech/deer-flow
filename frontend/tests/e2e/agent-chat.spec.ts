@@ -47,6 +47,85 @@ test.describe("Agent chat", () => {
     ).toBeVisible();
   });
 
+  test("guide questions fill the composer without sending a message", async ({
+    page,
+  }) => {
+    mockLangGraphAPI(page, { agents: MOCK_AGENTS });
+    let runRequestCount = 0;
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.includes("/runs/")) {
+        runRequestCount += 1;
+      }
+    });
+    await page.route("**/api/agent-management/catalog", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          agents: [
+            {
+              name: "test-agent",
+              runtime_name: "test-agent",
+              scope: "user",
+              guide_questions: [
+                {
+                  question: "帮我分析报告",
+                  prompt: "请分析附件中的报告",
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+
+    await page.goto("/workspace/agents/test-agent/chats/new");
+    await page.getByRole("button", { name: "帮我分析报告" }).click();
+
+    await expect(page.getByPlaceholder(/how can i assist you/i)).toHaveValue(
+      "请分析附件中的报告",
+    );
+    await expect(page).toHaveURL(/\/workspace\/agents\/test-agent\/chats\/new$/);
+    expect(runRequestCount).toBe(0);
+  });
+
+  test("public agent guide questions fill the composer without chatting", async ({
+    page,
+  }) => {
+    let chatRequestCount = 0;
+    await page.route("**/api/public/agents/report-agent/chat", (route) => {
+      chatRequestCount += 1;
+      return route.fulfill({ status: 500 });
+    });
+    await page.route("**/api/public/agents/report-agent", (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          name: "报告专家",
+          public_name: "report-agent",
+          description: "分析报告",
+          tool_groups: null,
+          skills: null,
+          guide_questions: [
+            {
+              question: "帮我分析报告",
+              prompt: "请分析附件中的报告",
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/agent/report-agent");
+    await page.getByRole("button", { name: "帮我分析报告" }).click();
+
+    await expect(page.getByPlaceholder("发送消息")).toHaveValue(
+      "请分析附件中的报告",
+    );
+    expect(chatRequestCount).toBe(0);
+  });
+
   test("keeps new-chat drafts isolated between agents", async ({ page }) => {
     mockLangGraphAPI(page, { agents: MOCK_AGENTS });
 

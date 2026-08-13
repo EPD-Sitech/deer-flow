@@ -286,7 +286,7 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
                 className="absolute top-full right-0 left-0"
                 questions={agent.guide_questions ?? []}
                 disabled={sending}
-                onSubmit={(prompt) => void sendMessage(prompt)}
+                onSelect={setDraft}
               />
             )}
           </div>

@@ -50,9 +50,9 @@ def _registry() -> AgentShareRegistry:
 
 
 def _share_owner(scope: Literal["user", "platform"]) -> str:
+    if getattr(get_current_user(), "system_role", None) != "admin":
+        raise HTTPException(status_code=403, detail="Only administrators can share Agents")
     if scope == "platform":
-        if getattr(get_current_user(), "system_role", None) != "admin":
-            raise HTTPException(status_code=403, detail="Only administrators can share public Agents")
         return "__platform__"
     return get_effective_user_id()
 
@@ -127,6 +127,7 @@ async def get_public_agent(public_name: str) -> dict:
         "tool_groups": config.tool_groups,
         "skills": config.skills,
         "guide_questions": guide_questions,
+        "runtime_name": resolved["runtime_name"],
     }
 
 

@@ -66,7 +66,10 @@ export function LocalAgentShareDialog({
   }, [agentName, scope]);
 
   const requestedSlug = slug.trim();
-  const publicName = requestedSlug.length > 0 ? requestedSlug : (share?.public_name ?? agentName);
+  const publicName =
+    requestedSlug.length > 0
+      ? requestedSlug
+      : (share?.public_name ?? agentName);
   const publicPath = `/public/agent/${encodeURIComponent(publicName)}`;
   const publicOrigin =
     typeof window === "undefined" ? "" : window.location.origin;
@@ -113,8 +116,8 @@ export function LocalAgentShareDialog({
           <DialogTitle>{zh ? "分享公开链接" : "Share public link"}</DialogTitle>
           <DialogDescription>
             {zh
-              ? "启用后，任何获得链接的人都能无需登录与此智能体对话。"
-              : "Anyone with the link can chat with this agent without signing in."}
+              ? "启用后，访问者登录后将按普通用户权限使用此专家。"
+              : "After signing in, visitors use this agent with normal user permissions."}
           </DialogDescription>
         </DialogHeader>
 

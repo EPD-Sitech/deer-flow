@@ -61,7 +61,7 @@ class AgentCatalogService:
             "can_delete": can_manage,
             "can_export": owns_agent or can_manage,
             "can_clone": owns_agent or can_manage,
-            "can_share": can_manage,
+            "can_share": self.can_manage_public,
             "can_batch": can_manage,
             "guide_questions": guide_questions,
         }

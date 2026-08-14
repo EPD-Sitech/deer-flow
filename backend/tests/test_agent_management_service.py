@@ -82,7 +82,12 @@ def service(tmp_path: Path) -> AgentManagementService:
     store = MemoryAgentStore()
     store.create(
         "writer",
-        {"name": "writer", "description": "Writes concise reports", "skills": ["research"]},
+        {
+            "name": "writer",
+            "description": "Writes concise reports",
+            "skills": ["research"],
+            "ui": {"guide_questions": [{"question": "分析这份报告"}]},
+        },
         "# Identity\n\nYou are a report writer with strict sourcing rules.",
         user_id="alice",
     )
@@ -266,7 +271,13 @@ def test_guide_question_validation(
 
 
 def test_public_sharing_is_explicit_and_resolves_alias(service: AgentManagementService, tmp_path: Path) -> None:
-    registry = AgentShareRegistry(store=service.store, state_file=tmp_path / "public-agent-shares.json")
+    paths = Paths(tmp_path)
+    platform_store = PlatformAgentStore(paths)
+    registry = AgentShareRegistry(
+        store=service.store,
+        platform_store=platform_store,
+        state_file=tmp_path / "public-agent-shares.json",
+    )
 
     assert registry.get("alice", "writer")["enabled"] is False
 
@@ -278,6 +289,25 @@ def test_public_sharing_is_explicit_and_resolves_alias(service: AgentManagementS
     assert resolved is not None
     assert resolved["config"].name == "writer"
     assert resolved["soul"].startswith("# Identity")
+    assert resolved["runtime_name"] == "writer"
+    published = platform_store.get("writer")
+    assert published.description == "Writes concise reports"
+    assert platform_store.get_soul("writer") == resolved["soul"]
+
+    visitor_catalog = AgentCatalogService(
+        store=service.store,
+        user_id="bob",
+        paths=paths,
+        can_manage_public=False,
+    ).list_agents()
+    public_item = next(item for item in visitor_catalog if item["name"] == "writer")
+    assert public_item["scope"] == "platform"
+    assert public_item["can_manage"] is False
+    assert public_item["can_view_details"] is True
+    assert public_item["guide_questions"] == [{"question": "分析这份报告"}]
+
+    registry.update("alice", "writer", enabled=False)
+    assert platform_store.exists("writer") is False
 
 
 def test_public_resolve_skips_stale_duplicate_before_valid_share(
@@ -297,6 +327,23 @@ def test_public_resolve_skips_stale_duplicate_before_valid_share(
     assert registry.resolve("report-writer") is None
 
 
+def test_deleted_shared_custom_agent_removes_its_public_copy(
+    service: AgentManagementService,
+    tmp_path: Path,
+) -> None:
+    platform_store = PlatformAgentStore(Paths(tmp_path))
+    registry = AgentShareRegistry(
+        store=service.store,
+        platform_store=platform_store,
+        state_file=tmp_path / "public-agent-shares.json",
+    )
+    registry.update("alice", "writer", enabled=True)
+    service.store.delete("writer", user_id="alice")
+
+    assert registry.resolve("writer") is None
+    assert platform_store.exists("writer") is False
+
+
 def test_public_slug_is_unique_across_local_agents(service: AgentManagementService, tmp_path: Path) -> None:
     service.store.create(
         "analyst",
@@ -304,7 +351,11 @@ def test_public_slug_is_unique_across_local_agents(service: AgentManagementServi
         "# Analyst",
         user_id="bob",
     )
-    registry = AgentShareRegistry(store=service.store, state_file=tmp_path / "public-agent-shares.json")
+    registry = AgentShareRegistry(
+        store=service.store,
+        platform_store=PlatformAgentStore(Paths(tmp_path)),
+        state_file=tmp_path / "public-agent-shares.json",
+    )
     registry.update("alice", "writer", enabled=True, public_slug="reports")
 
     with pytest.raises(ShareConflict, match="already in use"):
@@ -340,6 +391,7 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
     assert catalog[1]["can_batch"] is False
     assert catalog[1]["runtime_name"] == "public-researcher"
     assert catalog[1]["guide_questions"] == [{"question": "研究这份报告"}]
+    assert catalog[0]["can_share"] is False
 
     admin_catalog = AgentCatalogService(store=service.store, user_id="alice", paths=paths, can_manage_public=True).list_agents()
     assert admin_catalog[1]["can_manage"] is True
@@ -348,6 +400,7 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
     assert admin_catalog[1]["can_clone"] is True
     assert admin_catalog[1]["can_share"] is True
     assert admin_catalog[1]["can_batch"] is True
+    assert admin_catalog[0]["can_share"] is True
 
 
 @pytest.mark.parametrize("name", ["bad/name", "bad name", "bad.name", "bad_name", "../agent"])

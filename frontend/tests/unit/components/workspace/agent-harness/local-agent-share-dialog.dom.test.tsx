@@ -58,9 +58,10 @@ describe("LocalAgentShareDialog", () => {
 
     expect(await screen.findByText("公开链接当前未启用")).toBeTruthy();
     expect(
-      screen.getByText(
-        `${window.location.origin}/public/agent/report-agent`,
-      ),
+      screen.getByText("启用后，访问者登录后将按普通用户权限使用此专家。"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(`${window.location.origin}/public/agent/report-agent`),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "公开访问" }));
 

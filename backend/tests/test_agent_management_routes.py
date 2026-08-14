@@ -55,8 +55,8 @@ def test_local_agent_management_routes_are_incremental_and_exclude_other_catalog
     assert ("/api/agents/{name}", "DELETE") not in paths
 
 
-def test_public_agent_routes_bypass_cookie_auth_and_csrf() -> None:
-    assert _is_public("/api/public/agents/report-writer") is True
+def test_public_agent_routes_use_normal_cookie_auth_and_csrf() -> None:
+    assert _is_public("/api/public/agents/report-writer") is False
     request = Request(
         {
             "type": "http",
@@ -69,7 +69,7 @@ def test_public_agent_routes_bypass_cookie_auth_and_csrf() -> None:
             "query_string": b"",
         }
     )
-    assert should_check_csrf(request) is False
+    assert should_check_csrf(request) is True
 
 
 def test_source_schedule_shapes_map_to_native_scheduler_contract() -> None:
@@ -108,3 +108,15 @@ def test_only_admins_can_manage_public_agent_sharing(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(sharing_router_module, "get_current_user", lambda: SimpleNamespace(system_role="admin"))
     assert _share_owner("platform") == "__platform__"
+
+
+def test_only_admins_can_share_their_custom_agents(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sharing_router_module, "get_current_user", lambda: SimpleNamespace(system_role="user"))
+    monkeypatch.setattr(sharing_router_module, "get_effective_user_id", lambda: "regular-user")
+    with pytest.raises(HTTPException) as exc_info:
+        _share_owner("user")
+    assert exc_info.value.status_code == 403
+
+    monkeypatch.setattr(sharing_router_module, "get_current_user", lambda: SimpleNamespace(system_role="admin"))
+    monkeypatch.setattr(sharing_router_module, "get_effective_user_id", lambda: "admin-user")
+    assert _share_owner("user") == "admin-user"

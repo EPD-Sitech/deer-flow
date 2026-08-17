@@ -95,6 +95,7 @@ interface SkillCardProps {
   selected?: boolean;
   onToggleSelect?: () => void;
   onViewDetail?: () => void;
+  onEdit?: () => void;
 }
 
 export function SkillCard({
@@ -102,6 +103,7 @@ export function SkillCard({
   selected,
   onToggleSelect,
   onViewDetail,
+  onEdit,
 }: SkillCardProps) {
   const { user } = useAuth();
   const isAdmin = user?.system_role === "admin";
@@ -343,10 +345,10 @@ export function SkillCard({
               >
                 <DropdownMenuItem
                   className={MENU_ITEM_CLASS}
-                  onSelect={() => onViewDetail?.()}
+                  onSelect={() => onEdit?.()}
                 >
                   <EyeIcon />
-                  查看详情
+                  编辑
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className={MENU_ITEM_CLASS}
@@ -362,7 +364,7 @@ export function SkillCard({
                       onSelect={() => setCategoryOpen(true)}
                     >
                       <SettingsIcon />
-                      编辑设置
+                      设置
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className={`${MENU_ITEM_CLASS} ${MENU_DANGER_ITEM_CLASS}`}

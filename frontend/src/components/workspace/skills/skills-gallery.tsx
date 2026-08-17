@@ -36,6 +36,7 @@ import { CreateSkillDialog } from "./create-skill-dialog";
 import { ImportSkillDialog } from "./import-skill-dialog";
 import { SkillCard } from "./skill-card";
 import { SkillDetailDialog } from "./skill-detail-dialog";
+import { SkillEditorDialog } from "./skill-editor-dialog";
 
 export function SkillsGallery() {
   const { t } = useI18n();
@@ -51,6 +52,7 @@ export function SkillsGallery() {
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
   const batchDelete = useBatchDeleteSkills();
   const [detailSkill, setDetailSkill] = useState<Skill | null>(null);
+  const [editSkill, setEditSkill] = useState<Skill | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
@@ -180,7 +182,7 @@ export function SkillsGallery() {
                   onClick={() => setImportDialogOpen(true)}
                 >
                   <UploadIcon className="mr-1.5 size-3.5" />
-                  导入技能
+                  导入
                 </Button>
                 <Button
                   className="h-9 flex-1 rounded-[8px] bg-[linear-gradient(145deg,#2587ea,#419bff)] px-3 text-xs text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] hover:bg-[linear-gradient(145deg,#2587ea,#419bff)] hover:opacity-95 sm:flex-none"
@@ -201,20 +203,20 @@ export function SkillsGallery() {
           <button
             type="button"
             onClick={() => setCategoryFilter("all")}
-            className={`h-7 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-[10px] font-medium transition-colors ${
+            className={`h-8 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-xs font-medium transition-colors ${
               categoryFilter === "all"
                 ? "border-[#d2e3f1] bg-[#edf6ff] font-semibold text-[#1673c7] shadow-[0_2px_8px_rgba(35,83,125,0.08)] dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
                 : "border-transparent bg-transparent text-[#75879a] hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             }`}
           >
-            全部分类
+            全部
           </button>
           {SKILL_CATEGORIES.map((category) => (
             <button
               key={category.id}
               type="button"
               onClick={() => setCategoryFilter(category.id)}
-              className={`h-7 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-[10px] font-medium transition-colors ${
+              className={`h-8 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-xs font-medium transition-colors ${
                 categoryFilter === category.id
                   ? "border-[#d2e3f1] bg-[#edf6ff] font-semibold text-[#1673c7] shadow-[0_2px_8px_rgba(35,83,125,0.08)] dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
                   : "border-transparent bg-transparent text-[#75879a] hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
@@ -353,19 +355,31 @@ export function SkillsGallery() {
                     : undefined
                 }
                 onViewDetail={() => setDetailSkill(skill)}
+                onEdit={() => setEditSkill(skill)}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* 技能详情弹窗 */}
+      {/* 技能详情弹窗（点卡片打开） */}
       {detailSkill && (
         <SkillDetailDialog
           skill={detailSkill}
           open={!!detailSkill}
           onOpenChange={(open) => {
             if (!open) setDetailSkill(null);
+          }}
+        />
+      )}
+
+      {/* 技能编辑器弹窗（管理员更多菜单"编辑"打开） */}
+      {editSkill && (
+        <SkillEditorDialog
+          skill={editSkill}
+          open={!!editSkill}
+          onOpenChange={(open) => {
+            if (!open) setEditSkill(null);
           }}
         />
       )}

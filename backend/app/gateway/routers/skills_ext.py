@@ -167,6 +167,125 @@ class SkillMetadataResponse(BaseModel):
     recommended_scenarios: str | None = None
 
 
+# ── Skill file editor models (files / versions) ──────────────────────────────
+
+
+class SkillFileInfo(BaseModel):
+    path: str
+    size: int
+    modified: str
+
+
+class SkillFilesResponse(BaseModel):
+    skill_name: str
+    scope: str | None = None
+    can_edit: bool = False
+    files: list[SkillFileInfo] = Field(default_factory=list)
+
+
+class SkillFileContentResponse(BaseModel):
+    path: str
+    content: str
+    language: str
+    size: int
+
+
+class SkillFileSaveRequest(BaseModel):
+    content: str
+
+
+class SkillFileSaveResponse(BaseModel):
+    path: str
+    size: int
+    version_id: str
+
+
+class SkillFileRenameRequest(BaseModel):
+    new_path: str
+
+
+class SkillFileRenameResponse(BaseModel):
+    path: str
+    size: int
+    version_id: str
+
+
+class SkillVersionInfo(BaseModel):
+    version_id: str
+    timestamp: str
+    files_changed: list[str] = Field(default_factory=list)
+
+
+class SkillVersionsResponse(BaseModel):
+    versions: list[SkillVersionInfo] = Field(default_factory=list)
+
+
+class SkillRestoreResponse(BaseModel):
+    restored_version: str
+    backup_version: str
+    files_restored: list[str] = Field(default_factory=list)
+
+
+# ── Skill debug run models ───────────────────────────────────────────────────
+
+
+class SkillDebugRunRequest(BaseModel):
+    prompt: str = Field(..., description="User prompt to run the skill with")
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    model_name: str | None = None
+    timeout: int = Field(default=120, ge=5, le=600)
+
+
+class SkillDebugMessage(BaseModel):
+    role: str
+    content: str = ""
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    name: str | None = None
+    status: str | None = None
+
+
+class SkillDebugRunResponse(BaseModel):
+    success: bool
+    messages: list[SkillDebugMessage] = Field(default_factory=list)
+    duration_ms: float = 0.0
+    error: str | None = None
+
+
+# ── Skill evolution models ───────────────────────────────────────────────────
+
+
+class SkillEvolutionRecordModel(BaseModel):
+    id: str
+    feedback: str
+    summary: str
+    status: str
+    created_at: str
+    applied_at: str | None = None
+
+
+class SkillEvolutionRecordResponse(BaseModel):
+    id: str
+    feedback: str
+    summary: str
+    status: str
+    created_at: str
+    applied_at: str | None = None
+
+
+class SkillEvolutionRequest(BaseModel):
+    feedback: str = Field(..., min_length=1, max_length=2000)
+    thread_id: str | None = None
+    model_name: str | None = None
+
+
+class SkillEvolutionHistoryResponse(BaseModel):
+    records: list[SkillEvolutionRecordModel] = Field(default_factory=list)
+
+
+class SkillEvolutionSuggestionsResponse(BaseModel):
+    suggestions: list[str] = Field(default_factory=list)
+
+
 class SkillMetadataGenerateResponse(BaseModel):
     success: bool
     skill_name: str
@@ -641,3 +760,481 @@ async def create_empty_skill(
 
     await _refresh_prompt_cache()
     return CreateSkillResponse(name=skill_name, scope="user", skill_dir=str(storage.get_custom_skill_dir(skill_name)))
+
+
+# ── Skill file editor (files / versions) ─────────────────────────────────────
+# Ported from the harness skill detail dialog backend: browse, edit, rename and
+# delete skill files with automatic versioned backups (.versions/).
+
+
+def _skill_can_edit(skill: Any, request: Request) -> bool:
+    """Whether the caller may edit this skill's files (custom skills, or any
+    skill for admins — matching the public-skill admin management behaviour)."""
+    if skill.category == SkillCategory.CUSTOM:
+        return True
+    return request_is_admin(request)
+
+
+def _skill_dir_of(skill: Any) -> Path:
+    skill_dir = getattr(skill, "skill_dir", None)
+    if skill_dir is None or not Path(skill_dir).is_dir():
+        raise HTTPException(status_code=404, detail="技能目录不存在")
+    return Path(skill_dir)
+
+
+@router.get(
+    "/skills/{skill_name}/files",
+    response_model=SkillFilesResponse,
+    summary="List Skill Files",
+)
+async def list_skill_files(
+    skill_name: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillFilesResponse:
+    from app.gateway.skill_file_service import list_files as svc_list_files
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    try:
+        files = svc_list_files(_skill_dir_of(skill))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    scope = (
+        "public"
+        if skill.category == SkillCategory.PUBLIC
+        else "legacy"
+        if skill.category == SkillCategory.LEGACY
+        else "user"
+    )
+    return SkillFilesResponse(
+        skill_name=skill.name,
+        scope=scope,
+        can_edit=_skill_can_edit(skill, request),
+        files=[SkillFileInfo(path=f.path, size=f.size, modified=f.modified) for f in files],
+    )
+
+
+@router.get(
+    "/skills/{skill_name}/files/{file_path:path}",
+    response_model=SkillFileContentResponse,
+    summary="Read Skill File",
+)
+async def read_skill_file(
+    skill_name: str,
+    file_path: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillFileContentResponse:
+    from app.gateway.skill_file_service import read_file as svc_read_file
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    try:
+        fc = svc_read_file(_skill_dir_of(skill), file_path)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return SkillFileContentResponse(
+        path=fc.path, content=fc.content, language=fc.language, size=fc.size
+    )
+
+
+@router.put(
+    "/skills/{skill_name}/files/{file_path:path}",
+    response_model=SkillFileSaveResponse,
+    summary="Save Skill File",
+)
+async def save_skill_file(
+    skill_name: str,
+    file_path: str,
+    body: SkillFileSaveRequest,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillFileSaveResponse:
+    from app.gateway.skill_file_service import write_file as svc_write_file
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无编辑权限")
+    try:
+        result = svc_write_file(
+            _skill_dir_of(skill),
+            file_path,
+            body.content,
+            skill_name=skill.name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    await _refresh_prompt_cache()
+    return SkillFileSaveResponse(path=result.path, size=result.size, version_id=result.version_id)
+
+
+@router.delete(
+    "/skills/{skill_name}/files/{file_path:path}",
+    response_model=SkillFileSaveResponse,
+    summary="Delete Skill File",
+)
+async def delete_skill_file(
+    skill_name: str,
+    file_path: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillFileSaveResponse:
+    from app.gateway.skill_file_service import delete_file as svc_delete
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无编辑权限")
+    try:
+        result = svc_delete(_skill_dir_of(skill), file_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    await _refresh_prompt_cache()
+    return SkillFileSaveResponse(path=result.path, size=result.size, version_id=result.version_id)
+
+
+@router.post(
+    "/skills/{skill_name}/files/{file_path:path}/rename",
+    response_model=SkillFileRenameResponse,
+    summary="Rename Skill File",
+)
+async def rename_skill_file(
+    skill_name: str,
+    file_path: str,
+    body: SkillFileRenameRequest,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillFileRenameResponse:
+    from app.gateway.skill_file_service import rename_file as svc_rename
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无编辑权限")
+    try:
+        result = svc_rename(_skill_dir_of(skill), file_path, body.new_path)
+    except (ValueError, FileExistsError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    await _refresh_prompt_cache()
+    return SkillFileRenameResponse(path=result.path, size=result.size, version_id=result.version_id)
+
+
+@router.get(
+    "/skills/{skill_name}/versions",
+    response_model=SkillVersionsResponse,
+    summary="List Skill Versions",
+)
+async def list_skill_versions(
+    skill_name: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillVersionsResponse:
+    from app.gateway.skill_file_service import list_versions as svc_list_versions
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无查看版本权限")
+    versions = svc_list_versions(_skill_dir_of(skill))
+    return SkillVersionsResponse(
+        versions=[
+            SkillVersionInfo(
+                version_id=v.version_id,
+                timestamp=v.timestamp,
+                files_changed=v.files_changed,
+            )
+            for v in versions
+        ],
+    )
+
+
+def _debug_extract_content(content: Any) -> str:
+    """Extract text from a LangChain message content (str or content blocks)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+        return "\n".join(parts)
+    return str(content) if content else ""
+
+
+@router.post(
+    "/skills/{skill_name}/debug/run",
+    response_model=SkillDebugRunResponse,
+    summary="Debug Run Skill",
+)
+async def debug_run_skill(
+    skill_name: str,
+    body: SkillDebugRunRequest,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillDebugRunResponse:
+    """Run a skill through the deer-flow agent runtime for debugging.
+
+    Creates a temporary thread, submits a prompt that forces the skill, then
+    waits for the run to finish and returns the message trace.
+    """
+    import time as _time
+
+    from app.gateway.routers.thread_runs import wait_run as df_wait_run
+    from app.gateway.routers.threads import ThreadCreateRequest
+    from app.gateway.routers.threads import create_thread as df_create_thread
+    from app.gateway.run_models import RunCreateRequest
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无调试权限")
+    t0 = _time.monotonic()
+    try:
+        thread = await df_create_thread(
+            ThreadCreateRequest(metadata={"purpose": "skill_debug", "skill": skill.name}),
+            request,
+        )
+        thread_id = thread.thread_id
+
+        param_text = ""
+        if body.parameters:
+
+            param_text = "\n\n参数:\n" + "\n".join(
+                f"- {k}: {v}" for k, v in body.parameters.items()
+            )
+        user_message = (
+            f"请使用 {skill.name} 技能完成以下任务:\n{body.prompt}{param_text}\n\n"
+            f"提示: 请先读取技能 {skill.name} 的 SKILL.md, 然后按照其中的指引执行。"
+        )
+
+        run_body = RunCreateRequest(
+            input={"messages": [{"role": "user", "content": user_message}]},
+            metadata={"purpose": "skill_debug", "skill": skill.name},
+        )
+        if body.model_name:
+            run_body.context = {"model_name": body.model_name}
+
+        result = await asyncio.wait_for(
+            df_wait_run(thread_id=thread_id, body=run_body, request=request),
+            timeout=body.timeout,
+        )
+
+        messages: list[SkillDebugMessage] = []
+        if isinstance(result, dict) and result.get("status") == "error":
+            return SkillDebugRunResponse(
+                success=False,
+                messages=[],
+                duration_ms=(_time.monotonic() - t0) * 1000,
+                error=result.get("error") or "运行失败",
+            )
+
+        raw_messages = result.get("messages", []) if isinstance(result, dict) else []
+        for msg in raw_messages:
+            if not isinstance(msg, dict):
+                continue
+            entry = SkillDebugMessage(
+                role=str(msg.get("type", msg.get("role", "unknown"))),
+                content=_debug_extract_content(msg.get("content", "")),
+            )
+            if msg.get("tool_calls"):
+                entry.tool_calls = [
+                    {"name": tc.get("name", ""), "args": tc.get("args", {})}
+                    for tc in msg["tool_calls"]
+                    if isinstance(tc, dict)
+                ]
+            if msg.get("name"):
+                entry.name = str(msg["name"])
+            if msg.get("status"):
+                entry.status = str(msg["status"])
+            messages.append(entry)
+
+        return SkillDebugRunResponse(
+            success=True,
+            messages=messages,
+            duration_ms=(_time.monotonic() - t0) * 1000,
+        )
+    except TimeoutError:
+        return SkillDebugRunResponse(
+            success=False,
+            messages=[],
+            duration_ms=(_time.monotonic() - t0) * 1000,
+            error=f"执行超时 ({body.timeout}s)",
+        )
+    except Exception as exc:  # noqa: BLE001 - surface as a debug error
+        logger.exception("skill_debug.error skill=%s", skill.name)
+        return SkillDebugRunResponse(
+            success=False,
+            messages=[],
+            duration_ms=(_time.monotonic() - t0) * 1000,
+            error=str(exc),
+        )
+
+
+@router.post(
+    "/skills/{skill_name}/versions/{version_id}/restore",
+    response_model=SkillRestoreResponse,
+    summary="Restore Skill Version",
+)
+async def restore_skill_version(
+    skill_name: str,
+    version_id: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillRestoreResponse:
+    from app.gateway.skill_file_service import restore_version as svc_restore
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无回滚权限")
+    try:
+        result = svc_restore(_skill_dir_of(skill), version_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await _refresh_prompt_cache()
+    return SkillRestoreResponse(
+        restored_version=result.restored_version,
+        backup_version=result.backup_version,
+        files_restored=result.files_restored,
+    )
+
+
+# ── Skill evolution (AI-driven improvements) ─────────────────────────────────
+# Simplified file-backed port of the harness evolution service: records live in
+# <skill_dir>/.evolution/records.json and apply goes through the versioned file
+# service (restorable via the versions UI).
+
+
+def _evolution_record_to_model(record: Any) -> SkillEvolutionRecordModel:
+    return SkillEvolutionRecordModel(
+        id=record.id,
+        feedback=record.feedback,
+        summary=record.summary,
+        status=record.status,
+        created_at=record.created_at,
+        applied_at=record.applied_at,
+    )
+
+
+@router.post(
+    "/skills/{skill_name}/evolve",
+    response_model=SkillEvolutionRecordModel,
+    summary="Propose AI Evolution",
+)
+async def propose_skill_evolution(
+    skill_name: str,
+    body: SkillEvolutionRequest,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillEvolutionRecordResponse:
+    from app.gateway.skill_evolution_service import propose_evolution
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无编辑权限")
+    try:
+        record = await propose_evolution(
+            skill.name,
+            _skill_dir_of(skill),
+            body.feedback,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("propose evolution failed skill=%s", skill.name)
+        raise HTTPException(status_code=500, detail=f"演进失败: {e}") from e
+    return _evolution_record_to_model(record)
+
+
+@router.get(
+    "/skills/{skill_name}/evolution-history",
+    response_model=SkillEvolutionHistoryResponse,
+    summary="List Evolution History",
+)
+async def list_skill_evolution_history(
+    skill_name: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillEvolutionHistoryResponse:
+    from app.gateway.skill_evolution_service import list_records
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    records = list_records(_skill_dir_of(skill))
+    return SkillEvolutionHistoryResponse(
+        records=[_evolution_record_to_model(r) for r in records]
+    )
+
+
+@router.get(
+    "/skills/{skill_name}/evolution-suggestions",
+    response_model=SkillEvolutionSuggestionsResponse,
+    summary="List Evolution Feedback Suggestions",
+)
+async def list_skill_evolution_suggestions(
+    skill_name: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillEvolutionSuggestionsResponse:
+    from app.gateway.skill_evolution_service import SUGGESTION_PROMPTS
+
+    _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    return SkillEvolutionSuggestionsResponse(suggestions=SUGGESTION_PROMPTS)
+
+
+@router.post(
+    "/skills/{skill_name}/evolve/{record_id}/apply",
+    response_model=SkillEvolutionRecordModel,
+    summary="Apply AI Evolution",
+)
+async def apply_skill_evolution(
+    skill_name: str,
+    record_id: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillEvolutionRecordResponse:
+    from app.gateway.skill_evolution_service import apply_evolution
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无编辑权限")
+    try:
+        record = apply_evolution(_skill_dir_of(skill), record_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await _refresh_prompt_cache()
+    return _evolution_record_to_model(record)
+
+
+@router.post(
+    "/skills/{skill_name}/evolve/{record_id}/reject",
+    response_model=SkillEvolutionRecordModel,
+    summary="Reject AI Evolution",
+)
+async def reject_skill_evolution(
+    skill_name: str,
+    record_id: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> SkillEvolutionRecordResponse:
+    from app.gateway.skill_evolution_service import reject_evolution
+
+    skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
+    if not _skill_can_edit(skill, request):
+        raise HTTPException(status_code=403, detail="无编辑权限")
+    try:
+        record = reject_evolution(_skill_dir_of(skill), record_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return _evolution_record_to_model(record)

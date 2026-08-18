@@ -48,7 +48,7 @@ from deerflow.persistence.migrations._helpers import _normalize_default
 asyncio_test = pytest.mark.asyncio
 
 
-HEAD = "0012_mcp_task_results"
+HEAD = "0013_merge_mcp_transit"
 BASELINE = "0001_baseline"
 
 
@@ -853,6 +853,19 @@ class TestDecideState:
 
 def test_head_revision_is_expected() -> None:
     assert _get_head_revision() == HEAD
+
+
+def test_migration_graph_has_one_head() -> None:
+    """A branch merge must include an Alembic merge revision before landing."""
+    from alembic.config import Config  # noqa: PLC0415
+    from alembic.script import ScriptDirectory  # noqa: PLC0415
+
+    cfg = Config()
+    cfg.set_main_option(
+        "script_location",
+        str(Path(__file__).resolve().parents[1] / "packages/harness/deerflow/persistence/migrations"),
+    )
+    assert ScriptDirectory.from_config(cfg).get_heads() == [HEAD]
 
 
 def test_baseline_revision_id_is_known() -> None:

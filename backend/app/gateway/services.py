@@ -22,7 +22,14 @@ from langchain_core.messages.utils import convert_to_messages
 from langgraph.types import Command
 
 from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
-from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge
+from app.gateway.deps import (
+    get_checkpointer,
+    get_local_provider,
+    get_run_context,
+    get_run_manager,
+    get_stream_bridge,
+    resolve_transit_api_key,
+)
 from app.gateway.internal_auth import (
     INTERNAL_OWNER_USER_ID_HEADER_NAME,
     INTERNAL_SYSTEM_ROLE,
@@ -1079,7 +1086,8 @@ async def start_run(
     stream_modes = normalize_stream_modes(body.stream_mode)
     bridge = get_stream_bridge(request)
     run_mgr = get_run_manager(request)
-    run_ctx = get_run_context(request)
+    transit_api_key = await resolve_transit_api_key(request)
+    run_ctx = get_run_context(request, transit_api_key=transit_api_key)
 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
@@ -1094,10 +1102,18 @@ async def start_run(
         app_config = get_app_config()
         resolved = app_config.get_model_config(model_name)
         if resolved is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Model {model_name!r} is not in the configured model allowlist",
-            )
+            # Transit (Yixin SSO) users may select a model from the oneai relay
+            # catalog, which is not part of the static config allowlist. Accept
+            # it when the user has a transit credential; the worker will inject
+            # their apiKey and validate membership again at run time.
+            from app.gateway.transit.service import is_transit_user
+
+            transit_valid = is_transit_user(request)
+            if not transit_valid:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Model {model_name!r} is not in the configured model allowlist",
+                )
 
     owner_user_id = get_trusted_internal_owner_user_id(request)
     # Stateless run endpoints carry thread_id in the request *body*, so the

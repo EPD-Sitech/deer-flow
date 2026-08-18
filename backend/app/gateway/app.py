@@ -38,6 +38,7 @@ from app.gateway.routers import (
     suggestions,
     thread_runs,
     threads,
+    transit_models,
     uploads,
 )
 from app.gateway.trace_middleware import TraceMiddleware, resolve_trace_enabled
@@ -667,6 +668,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Uploads API is mounted at /api/threads/{thread_id}/uploads
     app.include_router(uploads.router)
+    app.include_router(transit_models.router)
 
     # Thread cleanup API is mounted at /api/threads/{thread_id}
     app.include_router(threads.router)

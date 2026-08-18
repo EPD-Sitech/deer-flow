@@ -39,6 +39,35 @@ class ModelsListResponse(BaseModel):
 
     models: list[ModelResponse]
     token_usage: TokenUsageResponse
+    # Transit (Yixin SSO) metadata — optional so existing consumers are unaffected.
+    is_yixin_user: bool = Field(default=False, description="True when the session carries a Yixin onconUUID claim")
+    has_api_key: bool = Field(default=False, description="True when the user's oneai apiKey was resolved live from YiXin (never stored)")
+    default_model: str | None = Field(default=None, description="The user's last selected model (null until first selection)")
+
+
+async def _resolve_transit_model(request: Request, model_name: str) -> ModelResponse | None:
+    """Resolve a model against the caller's oneai relay catalog, or None."""
+    try:
+        from app.gateway.transit.service import (
+            fetch_transit_models,
+            get_yx_uuid_from_request,
+        )
+
+        yx_uuid = get_yx_uuid_from_request(request)
+        if not yx_uuid:
+            return None
+        fetched = await fetch_transit_models(yx_uuid)
+        for item in fetched:
+            if item.get("name") == model_name:
+                return ModelResponse(
+                    name=item["name"],
+                    model=item["name"],
+                    display_name=item.get("display_name") or item["name"],
+                    description=None,
+                )
+    except Exception:  # noqa: BLE001 - degrade: treat as unknown model
+        logger.warning("Failed to resolve transit model %s", model_name, exc_info=True)
+    return None
 
 
 @router.get(
@@ -112,20 +141,64 @@ async def list_models(
                     logger.warning("Authorization provider failed while filtering models", exc_info=True)
                     visible_models = [] if fail_closed else config.models
 
-    models = [
-        ModelResponse(
-            name=model.name,
-            model=model.model,
-            display_name=model.display_name,
-            description=model.description,
-            supports_thinking=model.supports_thinking,
-            supports_reasoning_effort=model.supports_reasoning_effort,
-        )
-        for model in visible_models
-    ]
+    # Transit (Yixin SSO) users get their oneai models instead of the static
+    # catalog. The relay model list is a global shared resource; only the user's
+    # apiKey differs. The apiKey is fetched live from YiXin (never persisted);
+    # on failure fall back to the static catalog and report has_api_key=False so
+    # the frontend can show an error + retry via POST /api/models/refresh.
+    is_yixin_user = False
+    transit_has_key = False
+    transit_default_model = None
+    transit_models: list[ModelResponse] = []
+    if user is not None:
+        try:
+            from app.gateway.transit.service import (
+                fetch_transit_models,
+                get_transit_default_model,
+                get_yx_uuid_from_request,
+            )
+
+            yx_uuid = get_yx_uuid_from_request(request)
+            is_yixin_user = bool(yx_uuid)
+            if yx_uuid:
+                transit_default_model = get_transit_default_model(str(user.id))
+                try:
+                    fetched = await fetch_transit_models(yx_uuid)
+                    transit_models = [
+                        ModelResponse(
+                            name=item["name"],
+                            model=item["name"],
+                            display_name=item.get("display_name") or item["name"],
+                            description=None,
+                        )
+                        for item in fetched
+                    ]
+                    transit_has_key = True
+                except HTTPException:
+                    logger.warning("Failed to fetch oneai models for user %s", user.id, exc_info=True)
+        except Exception:  # noqa: BLE001 - transit must never break the static model list
+            logger.warning("Transit credential resolution failed for user %s", user.id, exc_info=True)
+
+    if is_yixin_user and transit_has_key:
+        models = transit_models
+    else:
+        models = [
+            ModelResponse(
+                name=model.name,
+                model=model.model,
+                display_name=model.display_name,
+                description=model.description,
+                supports_thinking=model.supports_thinking,
+                supports_reasoning_effort=model.supports_reasoning_effort,
+            )
+            for model in visible_models
+        ]
     return ModelsListResponse(
         models=models,
         token_usage=TokenUsageResponse(enabled=config.token_usage.enabled),
+        is_yixin_user=is_yixin_user,
+        has_api_key=transit_has_key,
+        default_model=transit_default_model,
     )
 
 
@@ -165,6 +238,11 @@ async def get_model(
         ```
     """
     model = config.get_model_config(model_name)
+    if model is None:
+        # Transit (Yixin SSO) users may request a relay model not in the static
+        # catalog. Resolve against their oneai catalog so /models/{name} works
+        # for the frontend's selected model.
+        model = await _resolve_transit_model(request, model_name)
     if model is None:
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
 

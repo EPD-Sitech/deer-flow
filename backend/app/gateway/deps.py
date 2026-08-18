@@ -594,7 +594,7 @@ def get_mcp_task_service(request: Request):
     return val
 
 
-def get_run_context(request: Request) -> RunContext:
+def get_run_context(request: Request, *, transit_api_key: str | None = None) -> RunContext:
     """Build a :class:`RunContext` from ``app.state`` singletons.
 
     Returns a *base* context with infrastructure dependencies. The
@@ -603,6 +603,11 @@ def get_run_context(request: Request) -> RunContext:
     ``event_store`` / ``run_events_config`` pair stays frozen to the snapshot
     captured in :func:`langgraph_runtime` so callers never see a store bound
     to one backend paired with a config pointing at another.
+
+    ``transit_api_key`` is the Yixin user's oneai apiKey (already resolved live
+    from YiXin by the caller on the async run path); it is passed through rather
+    than fetched here so this helper can stay synchronous for the sync
+    checkpoint-accessor callers.
     """
     return RunContext(
         checkpointer=get_checkpointer(request),
@@ -614,8 +619,28 @@ def get_run_context(request: Request) -> RunContext:
         thread_store=get_thread_store(request),
         app_config=get_config(),
         extensions=getattr(request.app.state, "extensions", None),
+        transit_api_key=transit_api_key,
         on_run_completed=getattr(request.app.state, "scheduled_task_service", None).handle_run_completion if getattr(request.app.state, "scheduled_task_service", None) is not None else None,
     )
+
+
+async def resolve_transit_api_key(request: Request) -> str | None:
+    """Resolve the Yixin user's oneai apiKey for the current run, or None.
+
+    Reads the ``yx_uuid`` claim from the session JWT and fetches the latest
+    apiKey live from YiXin (never persisted). Returns None for non-Yixin
+    sessions or when transit is unconfigured / the upstream fetch fails.
+    """
+    from app.gateway.transit.service import get_cached_api_key, get_yx_uuid_from_request
+
+    yx_uuid = get_yx_uuid_from_request(request)
+    if not yx_uuid:
+        return None
+    try:
+        return await get_cached_api_key(yx_uuid)
+    except Exception:  # noqa: BLE001 - degrade: run without transit apiKey
+        logger.warning("Failed to resolve transit apiKey for run context", exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------

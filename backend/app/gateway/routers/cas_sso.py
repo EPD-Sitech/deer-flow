@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.gateway.auth import create_access_token
 from app.gateway.auth.cas_auth import (
+    _decode_oncon_param,
     build_cas_login_url,
     build_cas_logout_url,
     decode_email_and_name,
@@ -27,6 +28,7 @@ from app.gateway.auth.cas_auth import (
     is_cas_enabled,
     validate_ticket,
 )
+from app.gateway.transit.service import ensure_transit_credential
 from app.gateway.auth.session_cookie import (
     ACCESS_TOKEN_COOKIE_NAME,
     SESSION_PERSISTENCE_COOKIE_NAME,
@@ -123,6 +125,10 @@ async def cas_callback(
         raise HTTPException(status_code=500, detail="CAS email_domain 未配置")
     email, display_name, mobile = decode_email_and_name(identifier, result.oncon_param)
 
+    # YiXin identity (onconUUID) — a non-secret user identifier carried in the
+    # session JWT so transit credential resolution needs no DB lookup.
+    yx_uuid = _decode_oncon_param(result.oncon_param).get("onconUUID")
+
     logger.info(
         "CAS authentication successful: identifier=%s, email=%s, display_name=%s, mobile=%s",
         identifier,
@@ -131,7 +137,21 @@ async def cas_callback(
         mobile,
     )
 
-    token, display_name = await _create_user_and_session(email, display_name or identifier, mobile)
+    token, display_name, user_id = await _create_user_and_session(
+        email, display_name or identifier, mobile, yx_uuid=yx_uuid
+    )
+
+    # Provision the oneai transit credential for Yixin users. The onconUUID is
+    # extracted from the CAS onconParam and carried in the session JWT; if
+    # present, we fetch the user's oneai apiKey live from the YiXin token
+    # interface (never persisted). Failures never block the login — the user
+    # still lands in the workspace with has_api_key=false (retry via refresh).
+    try:
+        if yx_uuid:
+            has_api_key = await ensure_transit_credential(yx_uuid)
+            logger.info("CAS transit credential provisioning: user=%s has_api_key=%s", user_id, has_api_key)
+    except Exception:  # noqa: BLE001 - transit provisioning must never block login
+        logger.exception("CAS transit credential provisioning failed for user %s", user_id)
 
     # Only allow a same-origin relative path for the post-login redirect;
     # mirrors OIDC's validate_next_param to avoid an open redirect via `lsu`.
@@ -170,16 +190,20 @@ async def cas_logout(request: Request):
     return response
 
 
-async def _create_user_and_session(email: str, name: str, mobile: str | None = None) -> tuple[str, str]:
-    """Find or create a user in DeerFlow, create a session, return the token and display name.
+async def _create_user_and_session(
+    email: str, name: str, mobile: str | None = None, yx_uuid: str | None = None
+) -> tuple[str, str, str]:
+    """Find or create a user in DeerFlow, create a session, return the token, display name, and user id.
 
     Args:
         email: User email address
         name: User display name
         mobile: Optional mobile number
+        yx_uuid: Optional YiXin onconUUID (Yixin SSO), stamped into the session
+            JWT so transit credential resolution needs no DB lookup.
 
     Returns:
-        Tuple of (session token, display name)
+        Tuple of (session token, display name, user id)
     """
     provider = get_local_provider()
 
@@ -201,5 +225,5 @@ async def _create_user_and_session(email: str, name: str, mobile: str | None = N
         logger.info("Created new CAS user: id=%s, email=%s", user_id, email)
         display_name = name
 
-    token = create_access_token(user_id, token_version=token_version)
-    return token, display_name
+    token = create_access_token(user_id, token_version=token_version, yx_uuid=yx_uuid)
+    return token, display_name, user_id

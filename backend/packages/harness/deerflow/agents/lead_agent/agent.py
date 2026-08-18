@@ -65,6 +65,7 @@ from deerflow.runtime.checkpoint_mode import (
     frozen_checkpoint_channel_mode,
     inject_checkpoint_mode,
 )
+from deerflow.runtime.context_keys import TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY
 from deerflow.skills.types import Skill
 from deerflow.tracing import build_tracing_callbacks
 
@@ -235,14 +236,20 @@ def _authorize_model_name(
     return model_name
 
 
-def _create_summarization_middleware(*, app_config: AppConfig | None = None, run_model_name: str | None = None) -> DeerFlowSummarizationMiddleware | None:
+def _create_summarization_middleware(*, app_config: AppConfig | None = None, run_model_name: str | None = None, model_overrides: dict | None = None) -> DeerFlowSummarizationMiddleware | None:
     """Create and configure the summarization middleware from config.
 
     ``run_model_name`` is the resolved run model; it is the source of truth for
     ``model_name: null`` summarization and the explicit-summary-model fallback, so a
-    custom agent's model is used instead of ``config.models[0]``.
+    custom agent's model is used instead of ``config.models[0]``. ``model_overrides``
+    carries the per-run transit (oneai) apiKey/base_url so the summary provider uses
+    the same credentials as the lead model.
     """
-    return create_summarization_middleware(app_config=app_config, run_model_name=run_model_name)
+    return create_summarization_middleware(
+        app_config=app_config,
+        run_model_name=run_model_name,
+        model_overrides=model_overrides,
+    )
 
 
 def _create_todo_list_middleware(is_plan_mode: bool) -> TodoMiddleware | None:
@@ -469,7 +476,11 @@ def build_middlewares(
     )
 
     # Add summarization middleware if enabled
-    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config, run_model_name=model_name)
+    summarization_middleware = _create_summarization_middleware(
+        app_config=resolved_app_config,
+        run_model_name=model_name,
+        model_overrides=_get_runtime_config(config).get(TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY),
+    )
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
 
@@ -714,6 +725,16 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
     # the resolved model profile (issue #4336). None when the agent set none.
     agent_model_settings = getattr(agent_config, "model_settings", None) if agent_config else None
     agent_model_overrides = agent_model_settings.model_dump(exclude_none=True) if agent_model_settings else None
+
+    # Transit integration: the run worker resolves the per-user oneai apiKey and
+    # passes it through the runtime context (see
+    # ``runtime/runs/worker.py::_resolve_transit_model_overrides``). Merge it
+    # into the model overrides so ``create_chat_model`` receives
+    # ``api_key``/``base_url`` (both are outside ``ModelConfig.model_dump``'s
+    # exclude list, so they reach the provider client verbatim).
+    transit_overrides = cfg.get(TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY)
+    if isinstance(transit_overrides, dict) and transit_overrides:
+        agent_model_overrides = {**(agent_model_overrides or {}), **transit_overrides}
 
     # Final model name resolution: request → agent config → global default, with fallback for unknown names
     model_name = _resolve_model_name(requested_model_name or agent_model_name, app_config=resolved_app_config)

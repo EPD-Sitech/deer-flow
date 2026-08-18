@@ -12,6 +12,10 @@ export const userSchema = z.object({
 
 export type User = Omit<z.infer<typeof userSchema>, "oauth_provider"> & {
   oauth_provider?: string | null;
+  // Yixin transit integration (optional — only present for Yixin SSO users)
+  is_yixin_user?: boolean;
+  has_api_key?: boolean;
+  default_model?: string | null;
 };
 
 // ── SSR auth result (tagged union) ────────────────────────────────

@@ -48,7 +48,10 @@ from deerflow.runtime.checkpoint_state import (
     graph_state_schema,
     graph_writable_channels,
 )
-from deerflow.runtime.context_keys import CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY
+from deerflow.runtime.context_keys import (
+    CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY,
+    TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY,
+)
 from deerflow.runtime.goal import (
     DEFAULT_MAX_GOAL_CONTINUATIONS,
     DEFAULT_MAX_NO_PROGRESS_CONTINUATIONS,
@@ -410,6 +413,65 @@ def _build_runtime_context(
     return runtime_ctx
 
 
+def _resolve_transit_model_overrides(ctx: RunContext) -> dict[str, str] | None:
+    """Resolve the per-user oneai transit model overrides for the current run.
+
+    The apiKey is delivered by the gateway via ``ctx.transit_api_key`` (resolved
+    live from YiXin, never persisted). When present, return
+    ``{"api_key", "base_url"}`` for the lead-agent factory to merge into
+    ``model_overrides``. Returns None for non-Yixin runs or when transit is
+    unconfigured (existing behavior).
+
+    The apiKey travels only through the runtime context
+    (``TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY``) — never through configurable /
+    checkpoint state.
+    """
+    api_key = ctx.transit_api_key
+    if not api_key:
+        return None
+    app_config = ctx.app_config
+    if app_config is None:
+        return None
+    extra = getattr(app_config, "model_extra", None) or {}
+    transit = extra.get("transit")
+    if not isinstance(transit, dict):
+        return None
+    base_url = str(transit.get("base_url") or transit.get("baseurl") or "").strip()
+    if not base_url:
+        return None
+    return {"api_key": api_key, "base_url": base_url}
+
+
+async def _augment_transit_app_config(
+    app_config: AppConfig | None,
+    *,
+    api_key: str,
+    base_url: str,
+) -> AppConfig | None:
+    """Return an AppConfig that also resolves the transit model catalog.
+
+    The oneai relay's model list is a global shared resource (identical for every
+    user sharing the relay); only the apiKey differs. The catalog is fetched
+    (cached by base_url) and merged into ``app_config.models`` so a transit
+    user's selected model name resolves in ``create_chat_model`` instead of
+    silently falling back to ``models[0]``.
+    """
+    if app_config is None or not api_key or not base_url:
+        return app_config
+    try:
+        from deerflow.runtime.transit import augment_app_config, get_transit_catalog
+
+        catalog = await get_transit_catalog(base_url, api_key)
+        return augment_app_config(app_config, catalog)
+    except Exception:  # noqa: BLE001 - degrade: fall back to static config, keep the apiKey override
+        logger.warning(
+            "Failed to augment transit catalog for base_url=%s; falling back to static models",
+            base_url,
+            exc_info=True,
+        )
+        return app_config
+
+
 @dataclass(frozen=True)
 class RunContext:
     """Infrastructure dependencies for a single agent run.
@@ -426,6 +488,11 @@ class RunContext:
     thread_store: Any | None = field(default=None)
     app_config: AppConfig | None = field(default=None)
     extensions: Any | None = field(default=None)
+    # Oneai apiKey for Yixin SSO transit users, resolved live from YiXin by the
+    # gateway and passed in via the run context. Never persisted; never read from
+    # a DB. None for non-transit runs. The lead-agent factory merges this into
+    # model_overrides.
+    transit_api_key: str | None = field(default=None)
     checkpoint_channel_mode: CheckpointChannelMode = "full"
     # Delta snapshot cadence frozen at startup; ``None`` means "not frozen in
     # this process" (embedded/tests) and resolves to the config default.
@@ -800,6 +867,36 @@ async def run_agent(
         # Resolve after runtime context installation so context/configurable reflect
         # the agent name that this run will actually execute.
         config.setdefault("run_name", resolve_root_run_name(config, record.assistant_id))
+
+        # Transit integration: the gateway resolved the Yixin user's oneai apiKey
+        # live from YiXin and handed it over via ``ctx.transit_api_key`` (never
+        # persisted). Pass it through the runtime context so the lead-agent
+        # factory can merge it into the model overrides. The value lives only in
+        # runtime context (never configurable / checkpoint) — mirroring the
+        # request-scoped secrets carrier.
+        transit_app_config = ctx.app_config
+        transit_overrides = _resolve_transit_model_overrides(ctx)
+        if transit_overrides:
+            context = config.setdefault("context", {})
+            context[TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY] = transit_overrides
+            transit_app_config = await _augment_transit_app_config(
+                ctx.app_config,
+                api_key=transit_overrides.get("api_key", ""),
+                base_url=transit_overrides.get("base_url", ""),
+            )
+            # Deliver the augmented catalog to the lead-agent factory.
+            # ``make_lead_agent`` reads ``app_config`` from the runtime *context*
+            # (agent.py reads ``cfg["app_config"]``), not from a factory kwarg — its
+            # signature only accepts ``config``. So we must place the augmented
+            # config at ``context["app_config"]`` (seen by the agent build at
+            # agent_factory(...) below) and also on ``runtime_ctx`` so the later
+            # ``_install_runtime_context`` re-install (which re-propagates the
+            # non-augmented ``ctx.app_config``) keeps the transit catalog instead of
+            # reverting to the static list. Without this, ``_resolve_model_name``
+            # never sees the oneai model names and silently falls back to models[0].
+            context["app_config"] = transit_app_config
+            runtime_ctx["app_config"] = transit_app_config
+
         initial_runnable_config = RunnableConfig(**config)
 
         def _continuation_runnable_config() -> RunnableConfig:
@@ -812,8 +909,11 @@ async def run_agent(
             return RunnableConfig(**continuation_config)
 
         agent_factory_kwargs: dict[str, Any] = {"config": initial_runnable_config}
-        if ctx.app_config is not None and _agent_factory_supports_app_config(agent_factory):
-            agent_factory_kwargs["app_config"] = ctx.app_config
+        # ``transit_app_config`` is ``ctx.app_config`` for non-transit runs, and the
+        # catalog-augmented copy for transit runs, so factories that accept
+        # ``app_config`` see the same config the runtime context carries.
+        if transit_app_config is not None and _agent_factory_supports_app_config(agent_factory):
+            agent_factory_kwargs["app_config"] = transit_app_config
         from deerflow.extensions import bind_agent_build_extensions
 
         with bind_agent_build_extensions(extensions):

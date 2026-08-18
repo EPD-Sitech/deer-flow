@@ -105,6 +105,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         configured_model_name: str | None = None,
         run_model_name: str | None = None,
         anchor_model_name: str | None = _UNSET,  # type: ignore[assignment]
+        model_overrides: dict | None = None,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -124,6 +125,11 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         self._app_config = app_config
         self._configured_summary_model_name = configured_model_name
         self._run_model_name = run_model_name
+        # Transit (Yixin SSO) model overrides: the oneai apiKey/base_url the run
+        # resolves live (see runtime/runs/worker.py). Summary model construction must
+        # carry them too, or oneai-based summary models fail with "api_key not set"
+        # and fall back to the static default (noisy but non-fatal).
+        self._model_overrides = dict(model_overrides or {})
         # The summary LLM call runs inside a LangGraph middleware hook, so its token
         # stream would otherwise be captured by the messages-tuple stream callback and
         # broadcast to the frontend as a phantom AI message. Tag a dedicated model copy
@@ -203,6 +209,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                 thinking_enabled=False,
                 app_config=self._app_config,
                 attach_tracing=False,
+                model_overrides=self._model_overrides or None,
             )
             built = self._tag_nostream(model.with_config(tags=["middleware:summarize"]))
         except Exception:
@@ -647,7 +654,11 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                 logger.exception("before_summarization hook %s failed", hook_name)
 
 
-def _build_summary_anchor(candidate_names: list[str | None], app_config: Any) -> tuple[Any | None, str | None]:
+def _build_summary_anchor(
+    candidate_names: list[str | None],
+    app_config: Any,
+    model_overrides: dict | None = None,
+) -> tuple[Any | None, str | None]:
     """Build the first constructible model among ``candidate_names`` (guarded).
 
     The returned model is tagged for RunJournal attribution but *not* TAG_NOSTREAM (the
@@ -664,7 +675,13 @@ def _build_summary_anchor(candidate_names: list[str | None], app_config: Any) ->
             continue
         tried.add(name)
         try:
-            model = create_chat_model(name=name, thinking_enabled=False, app_config=app_config, attach_tracing=False)
+            model = create_chat_model(
+                name=name,
+                thinking_enabled=False,
+                app_config=app_config,
+                attach_tracing=False,
+                model_overrides=model_overrides,
+            )
         except Exception:
             logger.exception("Failed to build summary anchor model %r; trying the next candidate", name)
             continue
@@ -678,6 +695,7 @@ def create_summarization_middleware(
     keep: tuple[str, int | float] | None = None,
     skip_memory_flush: bool = False,
     run_model_name: str | None = None,
+    model_overrides: dict | None = None,
 ) -> DeerFlowSummarizationMiddleware | None:
     """Create the configured summarization middleware.
 
@@ -725,6 +743,7 @@ def create_summarization_middleware(
     anchor_model, anchor_name = _build_summary_anchor(
         [primary_name, run_model_name or default_name, default_name, None],
         resolved_app_config,
+        model_overrides=model_overrides,
     )
     if anchor_model is None:
         logger.warning("Summarization is enabled but no summary model could be constructed; compaction is unavailable for this build")
@@ -753,4 +772,5 @@ def create_summarization_middleware(
         configured_model_name=config.model_name,
         run_model_name=run_model_name,
         anchor_model_name=anchor_name,
+        model_overrides=model_overrides,
     )

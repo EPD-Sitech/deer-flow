@@ -5,12 +5,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
 import {
   CheckIcon,
+  CircleAlertIcon,
   GraduationCapIcon,
   LightbulbIcon,
   Loader2Icon,
   MicIcon,
   PaperclipIcon,
   PlusIcon,
+  RefreshCwIcon,
   RocketIcon,
   SparklesIcon,
   SquareIcon,
@@ -75,6 +77,8 @@ import { useI18n } from "@/core/i18n/hooks";
 import { polishInputDraft } from "@/core/input-polish/api";
 import { isHiddenFromUIMessage } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
+import { saveThreadModelName } from "@/core/settings/local";
+import { refreshTransitModels, setDefaultTransitModel } from "@/core/models/transit";
 import {
   buildReferenceMessageMetadata,
   type SidecarContext,
@@ -352,6 +356,11 @@ export function InputBox({
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const { models } = useModels();
   const { user } = useAuth();
+  // Yixin transit (oneai) integration: only Yixin SSO users get a per-user
+  // relay model list + a refresh control. Non-Yixin users are unaffected.
+  const isYixinUser = user?.is_yixin_user === true;
+  const yixinApiKeyMissing = isYixinUser && user?.has_api_key === false;
+  const [refreshingModels, setRefreshingModels] = useState(false);
   const { thread, isMock } = useThread();
   const { attachments, textInput } = usePromptInputController();
   const setTextInput = textInput.setInput;
@@ -856,10 +865,43 @@ export function InputBox({
         mode: getResolvedMode(context.mode, model.supports_thinking ?? false),
         reasoning_effort: context.reasoning_effort,
       });
+      // Yixin users: persist the selection both locally (per-thread) and on
+      // the server (per-user default_model).
+      if (isYixinUser) {
+        saveThreadModelName(threadId, model_name);
+        void setDefaultTransitModel(model_name).catch(() => {
+          /* best-effort server persistence; ignore transient failures */
+        });
+      }
       setModelDialogOpen(false);
     },
-    [disabled, onContextChange, context, models, polishingInput],
+    [disabled, onContextChange, context, models, polishingInput, isYixinUser, threadId],
   );
+
+  const handleRefreshModels = useCallback(async () => {
+    if (refreshingModels) return;
+    setRefreshingModels(true);
+    try {
+      await refreshTransitModels();
+      await queryClient.invalidateQueries({ queryKey: ["models"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刷新模型列表失败");
+    } finally {
+      setRefreshingModels(false);
+    }
+  }, [refreshingModels, queryClient]);
+
+  // Yixin users: on first load with no per-thread selection, default to the
+  // server-side default_model so the relay model chosen last time is restored.
+  const appliedYixinDefaultRef = useRef(false);
+  useEffect(() => {
+    if (!isYixinUser || appliedYixinDefaultRef.current) return;
+    const def = user?.default_model;
+    if (def && models.length > 0 && !context.model_name) {
+      appliedYixinDefaultRef.current = true;
+      handleModelSelect(def);
+    }
+  }, [isYixinUser, user?.default_model, models, context.model_name, handleModelSelect]);
 
   const handleModeSelect = useCallback(
     (mode: InputMode) => {
@@ -2724,6 +2766,30 @@ export function InputBox({
                 </ModelSelectorList>
               </ModelSelectorContent>
             </ModelSelector>
+            {isYixinUser && !yixinApiKeyMissing && (
+              <PromptInputButton
+                className="rounded-full"
+                disabled={composerLocked || refreshingModels}
+                onClick={handleRefreshModels}
+                title="刷新模型列表"
+              >
+                <RefreshCwIcon
+                  className={cn("size-4", refreshingModels && "animate-spin")}
+                />
+              </PromptInputButton>
+            )}
+            {yixinApiKeyMissing && (
+              <Tooltip content="模型凭证获取失败，请点击刷新重试">
+                <PromptInputButton
+                  className="rounded-full"
+                  disabled={composerLocked || refreshingModels}
+                  onClick={handleRefreshModels}
+                  title="模型凭证获取失败，请点击刷新重试"
+                >
+                  <CircleAlertIcon className="size-4 text-amber-500" />
+                </PromptInputButton>
+              </Tooltip>
+            )}
             <PromptInputSubmit
               className="rounded-full"
               disabled={composerLocked}

@@ -36,6 +36,11 @@ from app.gateway.auth.session_cookie_state import SKIP_AUTH_CSRF_COOKIE_STATE_AT
 from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
 from app.gateway.deps import get_current_user_from_request, get_local_provider
+from app.gateway.transit.service import (
+    get_cached_api_key,
+    get_transit_default_model,
+    get_yx_uuid_from_request,
+)
 from deerflow.config.auth_config import OIDCProviderConfig
 
 logger = logging.getLogger(__name__)
@@ -441,12 +446,29 @@ async def change_password(request: Request, response: Response, body: ChangePass
 async def get_me(request: Request):
     """Get current authenticated user info."""
     user = await get_current_user_from_request(request)
+
+    # Yixin transit status: derived from the session JWT claim (yx_uuid) and a
+    # live apiKey fetch — no DB row is consulted.
+    yx_uuid = get_yx_uuid_from_request(request)
+    is_yixin_user = bool(yx_uuid)
+    has_api_key = False
+    default_model = None
+    if yx_uuid:
+        default_model = get_transit_default_model(str(user.id))
+        try:
+            has_api_key = bool(await get_cached_api_key(yx_uuid))
+        except Exception:  # noqa: BLE001 - degrade /me, never fail auth reads
+            logger.warning("Failed to resolve transit apiKey for /me user %s", user.id, exc_info=True)
+
     return UserResponse(
         id=str(user.id),
         email=user.email,
         system_role=user.system_role,
         needs_setup=user.needs_setup,
         oauth_provider=user.oauth_provider,
+        is_yixin_user=is_yixin_user,
+        has_api_key=has_api_key,
+        default_model=default_model,
     )
 
 

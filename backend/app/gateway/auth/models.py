@@ -40,3 +40,17 @@ class UserResponse(BaseModel):
     system_role: Literal["admin", "user"]
     needs_setup: bool = False
     oauth_provider: str | None = Field(None, description="OAuth/SSO provider ID if the user logged in via SSO (e.g. 'keycloak')")
+
+    # Yixin transit integration (optional — shared with /register, /initialize)
+    is_yixin_user: bool = Field(
+        default=False,
+        description="True when the session carries a Yixin onconUUID (Yixin SSO + oneai apiKey, resolved live).",
+    )
+    has_api_key: bool = Field(
+        default=False,
+        description="True when the user's oneai apiKey was resolved live from YiXin (never stored).",
+    )
+    default_model: str | None = Field(
+        default=None,
+        description="The user's last selected model (null until first selection).",
+    )

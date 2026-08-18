@@ -236,7 +236,13 @@ def _authorize_model_name(
     return model_name
 
 
-def _create_summarization_middleware(*, app_config: AppConfig | None = None, run_model_name: str | None = None, model_overrides: dict | None = None) -> DeerFlowSummarizationMiddleware | None:
+def _create_summarization_middleware(
+    *,
+    app_config: AppConfig | None = None,
+    run_model_name: str | None = None,
+    model_overrides: dict | None = None,
+    extensions=None,
+) -> DeerFlowSummarizationMiddleware | None:
     """Create and configure the summarization middleware from config.
 
     ``run_model_name`` is the resolved run model; it is the source of truth for
@@ -249,6 +255,7 @@ def _create_summarization_middleware(*, app_config: AppConfig | None = None, run
         app_config=app_config,
         run_model_name=run_model_name,
         model_overrides=model_overrides,
+        extensions=extensions,
     )
 
 
@@ -419,6 +426,9 @@ def build_middlewares(
         List of middleware instances.
     """
     resolved_app_config = app_config or get_app_config()
+    from deerflow.extensions import get_agent_build_extensions
+
+    resolved_extensions = extensions if extensions is not None else get_agent_build_extensions()
     runtime_middleware_kwargs = {
         "app_config": resolved_app_config,
         "lazy_init": True,
@@ -480,6 +490,7 @@ def build_middlewares(
         app_config=resolved_app_config,
         run_model_name=model_name,
         model_overrides=_get_runtime_config(config).get(TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY),
+        extensions=resolved_extensions,
     )
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
@@ -496,7 +507,12 @@ def build_middlewares(
         middlewares.append(TokenUsageMiddleware())
 
     # Add TitleMiddleware
-    middlewares.append(TitleMiddleware(app_config=resolved_app_config))
+    middlewares.append(
+        TitleMiddleware(
+            app_config=resolved_app_config,
+            extensions=resolved_extensions,
+        )
+    )
 
     # Add MemoryMiddleware after TitleMiddleware. Tool mode normally skips it;
     # conversation-extraction backends may explicitly retain passive writes.
@@ -598,10 +614,8 @@ def build_middlewares(
     # above, changing what "the final request" means for observers.
     from deerflow_extension_api import AgentScope
 
-    from deerflow.extensions import get_agent_build_extensions
     from deerflow.extensions.stack import compose_with_extensions
 
-    resolved_extensions = extensions if extensions is not None else get_agent_build_extensions()
     if not resolved_extensions.has_middleware_contributors:
         return compose_with_extensions(middlewares, AgentScope.LEAD, None, resolved_extensions)
 
@@ -844,6 +858,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
                 build_middlewares(
                     config,
                     model_name=model_name,
+                    agent_name=agent_name,
                     available_skills=set(_BOOTSTRAP_SKILL_NAMES),
                     app_config=resolved_app_config,
                     deferred_setup=setup,

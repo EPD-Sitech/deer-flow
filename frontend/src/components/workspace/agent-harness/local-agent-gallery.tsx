@@ -237,8 +237,8 @@ export function LocalAgentGallery() {
                   onClick={() => setCategoryFilter(category.id)}
                   className={
                     active
-                      ? "h-7 shrink-0 cursor-pointer rounded-md border border-[#d2e3f1] bg-[#edf6ff] px-2.5 text-[10px] font-semibold text-[#1673c7] shadow-sm dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                      : "h-7 shrink-0 cursor-pointer rounded-md border border-transparent px-2.5 text-[10px] font-medium text-[#75879a] transition-colors hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                      ? "h-8 shrink-0 cursor-pointer rounded-md border border-[#d2e3f1] bg-[#edf6ff] px-[9px] text-xs font-semibold text-[#1673c7] shadow-sm dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                      : "h-8 shrink-0 cursor-pointer rounded-md border border-transparent px-[9px] text-xs font-medium text-[#75879a] transition-colors hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                   }
                 >
                   {getLocalAgentCategoryLabel(category.id, locale)}

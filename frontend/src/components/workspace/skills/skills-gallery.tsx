@@ -80,6 +80,15 @@ export function SkillsGallery() {
     });
   }, [skills, scopeFilter, categoryFilter, searchQuery]);
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: skills.length };
+    for (const skill of skills) {
+      const category = skill.skill_category ?? "other";
+      counts[category] = (counts[category] ?? 0) + 1;
+    }
+    return counts;
+  }, [skills]);
+
   const toggleSelect = useCallback((name: string) => {
     setSelectedSkills((prev) => {
       const next = new Set(prev);
@@ -210,6 +219,9 @@ export function SkillsGallery() {
             }`}
           >
             全部
+            <span className="ml-1 rounded-full bg-white/70 px-1.5 text-[10px] font-semibold text-[#5f7890] dark:bg-slate-800 dark:text-slate-300">
+              {categoryCounts.all ?? 0}
+            </span>
           </button>
           {SKILL_CATEGORIES.map((category) => (
             <button
@@ -223,6 +235,9 @@ export function SkillsGallery() {
               }`}
             >
               {category.label}
+              <span className="ml-1 rounded-full bg-white/70 px-1.5 text-[10px] font-semibold text-[#5f7890] dark:bg-slate-800 dark:text-slate-300">
+                {categoryCounts[category.id] ?? 0}
+              </span>
             </button>
           ))}
         </div>

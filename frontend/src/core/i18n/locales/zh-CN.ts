@@ -464,8 +464,8 @@ export const zhCN: Translations = {
     agentCreated: "智能体已创建！",
     startChatting: "开始对话",
     backToGallery: "返回 Gallery",
-    settings: "模型设置",
-    settingsTitle: "模型设置",
+    settings: "设置",
+    settingsTitle: "设置",
     settingsDescription:
       "为该智能体选择默认模型和生成参数，修改在下一条消息生效。",
     settingsModel: "默认模型",

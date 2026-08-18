@@ -2,30 +2,22 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ActivityIcon,
   BrainIcon,
-  BugIcon,
   CalendarClockIcon,
-  CheckCircle2Icon,
   FileCode2Icon,
-  HistoryIcon,
   Loader2Icon,
   MessageCircleQuestionIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   PackageIcon,
-  PlayIcon,
   PlusIcon,
-  RotateCcwIcon,
   SaveIcon,
   Trash2Icon,
   UploadIcon,
-  XCircleIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,23 +36,12 @@ import { useI18n } from "@/core/i18n/hooks";
 import {
   createAgentVersion,
   getAgentFiles,
-  getAgentLogs,
   getAgentMemory,
-  getAgentStats,
   importSubAgentPackage,
-  listAgentVersions,
-  restoreAgentVersion,
-  testAgent,
   updateAgentFiles,
   updateAgentMemory,
-  validateAgent,
   type AgentFiles,
-  type AgentLog,
-  type AgentStats,
-  type AgentTestResult,
-  type AgentVersion,
   type AgentScope,
-  type ValidationResult,
 } from "./agent-management-api";
 import {
   MAX_AGENT_GUIDE_QUESTIONS,
@@ -83,19 +64,8 @@ type DetailTab =
   | "files"
   | "guideQuestions"
   | "memory"
-  | "versions"
-  | "debug"
-  | "activity"
   | "subagents"
   | "schedules";
-
-const EMPTY_STATS: AgentStats = {
-  total_calls: 0,
-  success_count: 0,
-  error_count: 0,
-  avg_latency_ms: 0,
-  total_tokens: 0,
-};
 
 export function LocalAgentDetailDialog({
   agent,
@@ -126,22 +96,6 @@ export function LocalAgentDetailDialog({
   const [memoryLoaded, setMemoryLoaded] = useState(false);
   const [savingMemory, setSavingMemory] = useState(false);
 
-  const [versions, setVersions] = useState<AgentVersion[]>([]);
-  const [versionsLoading, setVersionsLoading] = useState(false);
-  const [versionMessage, setVersionMessage] = useState("");
-  const [versionAction, setVersionAction] = useState(false);
-
-  const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [testPrompt, setTestPrompt] = useState(
-    zh ? "请介绍你自己" : "Introduce yourself",
-  );
-  const [testResult, setTestResult] = useState<AgentTestResult | null>(null);
-  const [debugLoading, setDebugLoading] = useState(false);
-
-  const [stats, setStats] = useState<AgentStats>(EMPTY_STATS);
-  const [logs, setLogs] = useState<AgentLog[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
-
   const subAgentInput = useRef<HTMLInputElement>(null);
   const [subAgentFile, setSubAgentFile] = useState<File | null>(null);
   const [subAgentLoading, setSubAgentLoading] = useState(false);
@@ -168,23 +122,10 @@ export function LocalAgentDetailDialog({
     }
   }, [agent.name, scope]);
 
-  const loadVersions = useCallback(async () => {
-    setVersionsLoading(true);
-    try {
-      setVersions(await listAgentVersions(agent.name, scope));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setVersionsLoading(false);
-    }
-  }, [agent.name, scope]);
-
   useEffect(() => {
     if (!open) return;
     setTab(initialTab);
     setMemoryLoaded(false);
-    setValidation(null);
-    setTestResult(null);
     void loadFiles();
   }, [initialTab, loadFiles, open]);
 
@@ -201,28 +142,6 @@ export function LocalAgentDetailDialog({
       )
       .finally(() => setMemoryLoading(false));
   }, [agent.name, memoryLoaded, open, scope, tab]);
-
-  useEffect(() => {
-    if (!open || tab !== "versions") return;
-    void loadVersions();
-  }, [loadVersions, open, tab]);
-
-  useEffect(() => {
-    if (!open || tab !== "activity") return;
-    setActivityLoading(true);
-    void Promise.all([
-      getAgentStats(agent.name, scope),
-      getAgentLogs(agent.name, scope),
-    ])
-      .then(([nextStats, nextLogs]) => {
-        setStats(nextStats);
-        setLogs(nextLogs);
-      })
-      .catch((error: unknown) =>
-        toast.error(error instanceof Error ? error.message : String(error)),
-      )
-      .finally(() => setActivityLoading(false));
-  }, [agent.name, open, scope, tab]);
 
   async function handleSaveFiles() {
     setSavingFiles(true);
@@ -278,64 +197,6 @@ export function LocalAgentDetailDialog({
     }
   }
 
-  async function handleCreateVersion() {
-    setVersionAction(true);
-    try {
-      await createAgentVersion(agent.name, versionMessage.trim(), scope);
-      setVersionMessage("");
-      await loadVersions();
-      toast.success(zh ? "版本快照已创建" : "Version created");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setVersionAction(false);
-    }
-  }
-
-  async function handleRestoreVersion(versionId: string) {
-    if (
-      !window.confirm(
-        zh
-          ? "恢复到这个版本？当前状态会自动创建快照。"
-          : "Restore this version?",
-      )
-    )
-      return;
-    setVersionAction(true);
-    try {
-      await restoreAgentVersion(agent.name, versionId, scope);
-      await Promise.all([loadFiles(), loadVersions()]);
-      await queryClient.invalidateQueries({ queryKey: ["agents"] });
-      toast.success(zh ? "版本已恢复" : "Version restored");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setVersionAction(false);
-    }
-  }
-
-  async function handleValidate() {
-    setDebugLoading(true);
-    try {
-      setValidation(await validateAgent(agent.name, scope));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setDebugLoading(false);
-    }
-  }
-
-  async function handleTest() {
-    setDebugLoading(true);
-    try {
-      setTestResult(await testAgent(agent.name, testPrompt, scope));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setDebugLoading(false);
-    }
-  }
-
   async function handleSubAgentImport() {
     if (!subAgentFile) return;
     setSubAgentLoading(true);
@@ -379,13 +240,6 @@ export function LocalAgentDetailDialog({
       icon: MessageCircleQuestionIcon,
     },
     { value: "memory", label: zh ? "记忆" : "Memory", icon: BrainIcon },
-    { value: "versions", label: zh ? "版本" : "Versions", icon: HistoryIcon },
-    { value: "debug", label: zh ? "调试" : "Debug", icon: BugIcon },
-    {
-      value: "activity",
-      label: zh ? "运行记录" : "Activity",
-      icon: ActivityIcon,
-    },
     {
       value: "subagents",
       label: zh ? "子智能体包" : "Sub-agent package",
@@ -710,214 +564,6 @@ export function LocalAgentDetailDialog({
                 )}
               </TabsContent>
 
-              <TabsContent value="versions" className="m-0 space-y-5">
-                <SectionHeading
-                  title={zh ? "版本历史" : "Version history"}
-                  description={
-                    zh
-                      ? "创建配置快照，或恢复到之前的配置与 SOUL。"
-                      : "Snapshot or restore configuration and SOUL."
-                  }
-                />
-                <div className="flex gap-2">
-                  <Input
-                    value={versionMessage}
-                    onChange={(event) => setVersionMessage(event.target.value)}
-                    placeholder={
-                      zh ? "版本说明（可选）" : "Version message (optional)"
-                    }
-                  />
-                  <Button
-                    onClick={() => void handleCreateVersion()}
-                    disabled={versionAction}
-                  >
-                    <HistoryIcon className="size-4" />
-                    {zh ? "创建快照" : "Create"}
-                  </Button>
-                </div>
-                {versionsLoading ? (
-                  <LoadingState />
-                ) : versions.length === 0 ? (
-                  <EmptyState text={zh ? "暂无版本快照" : "No versions"} />
-                ) : (
-                  <div className="divide-y border-y">
-                    {versions.map((version) => (
-                      <div
-                        key={version.version_id}
-                        className="flex items-center gap-3 py-3"
-                      >
-                        <HistoryIcon className="text-muted-foreground size-4 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {version.message || version.version_id}
-                          </p>
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {new Date(version.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={versionAction}
-                          onClick={() =>
-                            void handleRestoreVersion(version.version_id)
-                          }
-                        >
-                          <RotateCcwIcon className="size-4" />
-                          {zh ? "恢复" : "Restore"}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="debug" className="m-0 space-y-6">
-                <SectionHeading
-                  title={zh ? "校验与测试" : "Validate and test"}
-                  description={
-                    zh
-                      ? "检查配置完整性，并直接调用模型验证角色效果。"
-                      : "Validate configuration and run a direct model test."
-                  }
-                />
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => void handleValidate()}
-                    disabled={debugLoading}
-                  >
-                    <CheckCircle2Icon className="size-4" />
-                    {zh ? "校验配置" : "Validate"}
-                  </Button>
-                  {validation && (
-                    <Badge
-                      variant={validation.valid ? "secondary" : "destructive"}
-                    >
-                      {validation.valid
-                        ? zh
-                          ? "校验通过"
-                          : "Valid"
-                        : zh
-                          ? "校验失败"
-                          : "Invalid"}
-                    </Badge>
-                  )}
-                </div>
-                {validation && (
-                  <div className="divide-y border-y">
-                    {validation.checks.map((check) => (
-                      <div
-                        key={check.check}
-                        className="flex items-start gap-2 py-2 text-sm"
-                      >
-                        {check.status === "error" ? (
-                          <XCircleIcon className="text-destructive mt-0.5 size-4" />
-                        ) : (
-                          <CheckCircle2Icon className="mt-0.5 size-4 text-emerald-600" />
-                        )}
-                        <span>{check.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="space-y-3 border-t pt-5">
-                  <Textarea
-                    value={testPrompt}
-                    onChange={(event) => setTestPrompt(event.target.value)}
-                    rows={3}
-                    aria-label={zh ? "测试提示词" : "Test prompt"}
-                  />
-                  <Button
-                    onClick={() => void handleTest()}
-                    disabled={debugLoading || !testPrompt.trim()}
-                  >
-                    {debugLoading ? (
-                      <Loader2Icon className="size-4 animate-spin" />
-                    ) : (
-                      <PlayIcon className="size-4" />
-                    )}
-                    {zh ? "运行测试" : "Run test"}
-                  </Button>
-                  {testResult && (
-                    <div className="bg-muted/30 rounded-lg border p-4">
-                      <p className="text-sm leading-6 whitespace-pre-wrap">
-                        {testResult.response}
-                      </p>
-                      <p className="text-muted-foreground mt-3 text-xs">
-                        {testResult.metadata.model_used} ·{" "}
-                        {testResult.metadata.tokens_used} tokens ·{" "}
-                        {testResult.metadata.latency_ms} ms
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="activity" className="m-0 space-y-5">
-                <SectionHeading
-                  title={zh ? "统计与运行日志" : "Statistics and logs"}
-                  description={
-                    zh
-                      ? "查看该智能体关联会话的调用情况。"
-                      : "Inspect usage across this agent's conversations."
-                  }
-                />
-                {activityLoading ? (
-                  <LoadingState />
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                      <Metric
-                        label={zh ? "调用" : "Calls"}
-                        value={stats.total_calls}
-                      />
-                      <Metric
-                        label={zh ? "成功" : "Success"}
-                        value={stats.success_count}
-                      />
-                      <Metric
-                        label={zh ? "失败" : "Errors"}
-                        value={stats.error_count}
-                      />
-                      <Metric
-                        label={zh ? "平均耗时" : "Avg latency"}
-                        value={`${stats.avg_latency_ms} ms`}
-                      />
-                      <Metric label="Tokens" value={stats.total_tokens} />
-                    </div>
-                    {logs.length === 0 ? (
-                      <EmptyState text={zh ? "暂无运行日志" : "No run logs"} />
-                    ) : (
-                      <div className="divide-y border-y">
-                        {logs.map((log, index) => (
-                          <div
-                            key={`${log.thread_id}-${index}`}
-                            className="py-3"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="truncate text-sm font-medium">
-                                {log.user_query || log.thread_id}
-                              </p>
-                              <Badge variant="outline">{log.status}</Badge>
-                            </div>
-                            <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
-                              {log.error ?? log.response_summary}
-                            </p>
-                            <p className="text-muted-foreground mt-1 text-[11px]">
-                              {log.timestamp
-                                ? new Date(log.timestamp).toLocaleString()
-                                : ""}{" "}
-                              · {log.latency_ms} ms · {log.tokens_used} tokens
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </TabsContent>
-
               <TabsContent value="subagents" className="m-0 space-y-5">
                 <SectionHeading
                   title={zh ? "导入子智能体包" : "Import sub-agent package"}
@@ -1050,11 +696,3 @@ function EditorField({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-muted/25 rounded-lg border p-3">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="mt-1 text-lg font-semibold">{value}</p>
-    </div>
-  );
-}

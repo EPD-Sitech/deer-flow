@@ -230,6 +230,29 @@ tool_groups:
   - name: bash         # Shell command execution
 ```
 
+### Per-Agent MCP Server Allowlist
+
+Custom agents can restrict the MCP servers whose tools are exposed to that
+agent in the agent-local `config.yaml`:
+
+```yaml
+mcp_servers:
+  - analytics
+  - postgres
+```
+
+The field has three states:
+
+- Omitted or `null`: preserve the default behavior and expose tools from all
+  enabled MCP servers.
+- `[]`: expose no MCP tools to this agent.
+- A list of names: expose tools only from the named enabled MCP servers.
+
+The restriction applies to the lead agent, delegated sub-agents, and ACP
+sessions launched by the agent. A name that is not enabled simply contributes
+no tools; it does not enable or configure that server. The Gateway Agent API
+accepts the same `mcp_servers` field when creating or updating a custom agent.
+
 ### Scheduler
 
 The scheduled-task MVP adds a scheduler section to `config.yaml`:

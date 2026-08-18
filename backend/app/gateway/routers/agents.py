@@ -6,7 +6,7 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from deerflow.config.agents_api_config import get_agents_api_config
 from deerflow.config.agents_config import (
@@ -42,6 +42,7 @@ class AgentResponse(BaseModel):
     description: str = Field(default="", description="Agent description")
     model: str | None = Field(default=None, description="Optional model override")
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
+    mcp_servers: list[str] | None = Field(default=None, description="Optional MCP server whitelist (None=all, []=none)")
     skills: list[str] | None = Field(default=None, description="Optional skill whitelist (None=all, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
@@ -62,11 +63,17 @@ class AgentCreateRequest(BaseModel):
     description: str = Field(default="", description="Agent description")
     model: str | None = Field(default=None, description="Optional model override")
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
+    mcp_servers: list[str] | None = Field(default=None, description="Optional MCP server whitelist (None=all, []=none)")
     skills: list[str] | None = Field(default=None, description="Optional skill whitelist (None=all enabled, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
     soul: str = Field(default="", description="SOUL.md content — agent personality and behavioral guardrails")
+
+    @field_validator("mcp_servers")
+    @classmethod
+    def _validate_mcp_servers(cls, value: list[str] | None) -> list[str] | None:
+        return _validate_mcp_server_names(value)
 
 
 class AgentUpdateRequest(BaseModel):
@@ -75,11 +82,27 @@ class AgentUpdateRequest(BaseModel):
     description: str | None = Field(default=None, description="Updated description")
     model: str | None = Field(default=None, description="Updated model override")
     tool_groups: list[str] | None = Field(default=None, description="Updated tool group whitelist")
+    mcp_servers: list[str] | None = Field(default=None, description="Updated MCP server whitelist (None=all, []=none)")
     skills: list[str] | None = Field(default=None, description="Updated skill whitelist (None=all, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Updated per-agent sampling overrides")
     thinking_enabled: bool | None = Field(default=None, description="Updated per-agent thinking-mode default")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Updated per-agent reasoning-effort default")
     soul: str | None = Field(default=None, description="Updated SOUL.md content")
+
+    @field_validator("mcp_servers")
+    @classmethod
+    def _validate_mcp_servers(cls, value: list[str] | None) -> list[str] | None:
+        return _validate_mcp_server_names(value)
+
+
+def _validate_mcp_server_names(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    if any(not name.strip() for name in value):
+        raise ValueError("mcp_servers must contain only non-empty server names")
+    if len(value) != len(set(value)):
+        raise ValueError("mcp_servers must not contain duplicate server names")
+    return value
 
 
 def _validate_agent_name(name: str) -> None:
@@ -188,6 +211,7 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         description=agent_cfg.description,
         model=agent_cfg.model,
         tool_groups=agent_cfg.tool_groups,
+        mcp_servers=agent_cfg.mcp_servers,
         skills=agent_cfg.skills,
         model_settings=agent_cfg.model_settings,
         thinking_enabled=agent_cfg.thinking_enabled,
@@ -323,6 +347,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         config_data["description"] = request.description
     if request.tool_groups is not None:
         config_data["tool_groups"] = request.tool_groups
+    if request.mcp_servers is not None:
+        config_data["mcp_servers"] = request.mcp_servers
     if request.skills is not None:
         config_data["skills"] = request.skills
     # model / model_settings / thinking_enabled / reasoning_effort (issue #4336).
@@ -405,7 +431,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         # Use model_fields_set to distinguish "field omitted" from "explicitly set to null".
         # This is critical for skills where None means "inherit all" (not "don't change").
         fields_set = request.model_fields_set
-        config_changed = bool(fields_set & ({"description", "tool_groups", "skills"} | set(_MODEL_BEHAVIOR_FIELDS)))
+        config_changed = bool(fields_set & ({"description", "tool_groups", "mcp_servers", "skills"} | set(_MODEL_BEHAVIOR_FIELDS)))
 
         updated: dict | None = None
         if config_changed:
@@ -417,6 +443,10 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
             new_tool_groups = request.tool_groups if "tool_groups" in fields_set else agent_cfg.tool_groups
             if new_tool_groups is not None:
                 updated["tool_groups"] = new_tool_groups
+
+            new_mcp_servers = request.mcp_servers if "mcp_servers" in fields_set else agent_cfg.mcp_servers
+            if new_mcp_servers is not None:
+                updated["mcp_servers"] = new_mcp_servers
 
             # skills: None = inherit all, [] = no skills, ["a","b"] = whitelist
             if "skills" in fields_set:

@@ -63,6 +63,8 @@ The frontend is a stateful chat application. Users create **threads** (conversat
 - **`typings/`** — Ambient TypeScript declarations
 - Root files: `env.js` (env validation), `mdx-components.ts` (MDX component map)
 
+The local Agent gallery uses `AgentSettingsDialog` for every editable Agent, including administrator-managed public Agents. `LocalAgentCard` must pass the catalog `scope` through the dialog; versions, validation, testing, activity, and structured setting writes all use that scope so a public Agent never falls back to user-owned storage. Skill and MCP selections are explicit arrays (`[]` means none), and a successful settings write must invalidate the catalog query before the dialog closes so reopening reflects persisted allowlists.
+
 ### Data Flow
 
 1. Optional composer helpers such as `core/input-polish` can rewrite the local draft before submission, and `core/voice-input` can transcribe browser microphone input into that same local draft; confirmed user input then flows to thread hooks (`core/threads/hooks.ts`) → LangGraph SDK streaming

@@ -380,6 +380,7 @@ async def task_tool(
 
     # Inherit parent agent's tool_groups so subagents respect the same restrictions
     parent_tool_groups = metadata.get("tool_groups")
+    parent_mcp_servers = metadata.get("mcp_servers")
     resolved_app_config = runtime_app_config
     if config.model == "inherit" and parent_model is None and resolved_app_config is None:
         resolved_app_config = get_app_config()
@@ -395,6 +396,8 @@ async def task_tool(
         "subagent_enabled": False,
         "include_upload_tool": False,
     }
+    if parent_mcp_servers is not None:
+        available_tools_kwargs["mcp_servers"] = parent_mcp_servers
     if resolved_app_config is not None:
         available_tools_kwargs["app_config"] = resolved_app_config
     tools = get_available_tools(**available_tools_kwargs)

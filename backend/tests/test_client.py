@@ -1249,6 +1249,25 @@ class TestEnsureAgent:
         assert mock_apply_prompt.call_args.kwargs.get("available_skills") == {"test_skill"}
         assert mock_create_agent.call_args.kwargs["state_schema"] is ThreadState
 
+    def test_custom_agent_mcp_allowlist_applies_to_embedded_tools_and_subagents(self, client):
+        config = client._get_runnable_config("t-mcp")
+        client._agent_name = "custom-agent"
+
+        with (
+            patch("deerflow.client.load_agent_config", return_value=SimpleNamespace(mcp_servers=["analytics"])),
+            patch("deerflow.client.create_chat_model"),
+            patch("deerflow.client.create_agent", return_value=MagicMock()),
+            patch("deerflow.client.build_middlewares", return_value=[]),
+            patch("deerflow.client.apply_prompt_template", return_value="prompt"),
+            patch("deerflow.client.get_enabled_skills_for_config", return_value=[]),
+            patch.object(client, "_get_tools", return_value=[]) as mock_get_tools,
+            patch("deerflow.runtime.checkpointer.get_checkpointer", return_value=None),
+        ):
+            client._ensure_agent(config)
+
+        assert mock_get_tools.call_args.kwargs["mcp_servers"] == ["analytics"]
+        assert config["metadata"]["mcp_servers"] == ["analytics"]
+
     def test_delta_mode_selects_state_and_normalizes_middleware(self, client):
         mock_agent = MagicMock()
         middleware = ViewImageMiddleware()
@@ -1340,7 +1359,7 @@ class TestEnsureAgent:
         """_ensure_agent does not recreate if config key unchanged."""
         mock_agent = MagicMock()
         client._agent = mock_agent
-        client._agent_config_key = (None, True, False, False, None, None, None, None, "full", 10, None)
+        client._agent_config_key = (None, True, False, False, None, None, None, None, "full", 10, None, None)
 
         config = client._get_runnable_config("t1")
         client._ensure_agent(config)

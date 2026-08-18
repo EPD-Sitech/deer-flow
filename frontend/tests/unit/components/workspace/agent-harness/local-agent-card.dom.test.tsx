@@ -31,7 +31,9 @@ rs.mock("@/core/i18n/hooks", () => ({
 }));
 
 rs.mock("@/components/workspace/agents/agent-settings-dialog", () => ({
-  AgentSettingsDialog: () => null,
+  AgentSettingsDialog: ({ scope }: { scope?: string }) => (
+    <div data-testid="agent-settings-dialog" data-scope={scope} />
+  ),
 }));
 
 rs.mock(
@@ -75,13 +77,18 @@ describe("LocalAgentCard management menu", () => {
     });
     await openMenu("report-agent");
 
-    expect(screen.getByText("详情编辑")).toBeTruthy();
-    expect(screen.getByText("分享公开链接")).toBeTruthy();
-    expect(screen.getByText("定时任务")).toBeTruthy();
+    expect(screen.getByText("编辑")).toBeTruthy();
+    expect(screen.getByText("分享")).toBeTruthy();
+    expect(screen.getByText("定时")).toBeTruthy();
     expect(screen.getByText("克隆")).toBeTruthy();
-    expect(screen.getByText("导出 ZIP")).toBeTruthy();
-    expect(screen.getByText("导出 Markdown")).toBeTruthy();
+    expect(screen.getAllByText("导出")).toHaveLength(1);
+    expect(screen.queryByText("导出 Markdown")).toBeNull();
     expect(screen.getByText("模型设置")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("模型设置"));
+    expect(
+      screen.getByTestId("agent-settings-dialog").getAttribute("data-scope"),
+    ).toBe("user");
   });
 
   it("limits a public Agent to read-only details for regular users", async () => {
@@ -115,11 +122,10 @@ describe("LocalAgentCard management menu", () => {
       }),
     ).toBeNull();
     expect(screen.queryByText("克隆")).toBeNull();
-    expect(screen.queryByText("导出 ZIP")).toBeNull();
-    expect(screen.queryByText("导出 Markdown")).toBeNull();
-    expect(screen.queryByText("分享公开链接")).toBeNull();
-    expect(screen.queryByText("详情编辑")).toBeNull();
-    expect(screen.queryByText("定时任务")).toBeNull();
+    expect(screen.queryByText("导出")).toBeNull();
+    expect(screen.queryByText("分享")).toBeNull();
+    expect(screen.queryByText("编辑")).toBeNull();
+    expect(screen.queryByText("定时")).toBeNull();
     expect(screen.queryByText("模型设置")).toBeNull();
     expect(screen.queryByText("删除")).toBeNull();
 
@@ -163,11 +169,17 @@ describe("LocalAgentCard management menu", () => {
     });
     await openMenu("public-admin-agent");
 
-    expect(screen.getByText("分享公开链接")).toBeTruthy();
-    expect(screen.getByText("详情编辑")).toBeTruthy();
-    expect(screen.getByText("定时任务")).toBeTruthy();
+    expect(screen.getByText("分享")).toBeTruthy();
+    expect(screen.getByText("编辑")).toBeTruthy();
+    expect(screen.getByText("定时")).toBeTruthy();
+    expect(screen.getAllByText("导出")).toHaveLength(1);
     expect(screen.getByText("模型设置")).toBeTruthy();
     expect(screen.getByText("删除")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("模型设置"));
+    expect(
+      screen.getByTestId("agent-settings-dialog").getAttribute("data-scope"),
+    ).toBe("platform");
   });
 
   it("uses the runtime alias to chat with a Chinese public Agent", async () => {

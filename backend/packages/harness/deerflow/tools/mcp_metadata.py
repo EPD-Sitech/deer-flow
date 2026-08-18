@@ -19,18 +19,30 @@ from typing import Any
 from langchain.tools import BaseTool
 
 MCP_TOOL_METADATA_KEY = "deerflow_mcp"
+MCP_TOOL_SERVER_KEY = "deerflow_mcp_server"
 MCP_TOOL_ROUTING_METADATA_KEY = "deerflow_mcp_routing"
 
 
-def tag_mcp_tool(tool: BaseTool) -> BaseTool:
-    """Mark ``tool`` as MCP-sourced. Mutates in place and returns it for chaining."""
-    tool.metadata = {**(tool.metadata or {}), MCP_TOOL_METADATA_KEY: True}
+def tag_mcp_tool(tool: BaseTool, server_name: str | None = None) -> BaseTool:
+    """Mark ``tool`` as MCP-sourced and optionally record its producing server."""
+    metadata = {**(tool.metadata or {}), MCP_TOOL_METADATA_KEY: True}
+    if server_name is not None:
+        metadata[MCP_TOOL_SERVER_KEY] = server_name
+    tool.metadata = metadata
     return tool
 
 
 def is_mcp_tool(tool: BaseTool) -> bool:
     """True when ``tool`` carries the MCP-source tag written by :func:`tag_mcp_tool`."""
     return (getattr(tool, "metadata", None) or {}).get(MCP_TOOL_METADATA_KEY) is True
+
+
+def get_mcp_server_name(tool: BaseTool) -> str | None:
+    """Return the MCP server that produced ``tool``, if known."""
+    if not is_mcp_tool(tool):
+        return None
+    server_name = (getattr(tool, "metadata", None) or {}).get(MCP_TOOL_SERVER_KEY)
+    return server_name if isinstance(server_name, str) and server_name else None
 
 
 def tag_mcp_routing(tool: BaseTool, routing: Mapping[str, Any]) -> BaseTool:

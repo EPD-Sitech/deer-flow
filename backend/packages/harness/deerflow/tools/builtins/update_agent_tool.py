@@ -209,6 +209,11 @@ def update_agent(
     if skills is not None and skills != existing_cfg.skills:
         updated_fields.append("skills")
 
+    # MCP access is operator-managed and is not exposed as an LLM-callable
+    # argument. Preserve it whenever this tool rewrites the agent config.
+    if existing_cfg.mcp_servers is not None:
+        config_data["mcp_servers"] = existing_cfg.mcp_servers
+
     # This tool intentionally does not expose the #4336 model-behavior fields
     # as LLM-callable arguments yet, but it still rewrites config.yaml when any
     # of its supported fields changes. Carry those values forward explicitly so

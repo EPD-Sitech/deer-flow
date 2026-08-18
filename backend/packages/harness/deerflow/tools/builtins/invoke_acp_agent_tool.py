@@ -59,7 +59,7 @@ def _build_mcp_servers() -> dict[str, dict[str, Any]]:
     return build_servers_config(ExtensionsConfig.from_file())
 
 
-def _build_acp_mcp_servers() -> list[dict[str, Any]]:
+def _build_acp_mcp_servers(allowed_servers: set[str] | None = None) -> list[dict[str, Any]]:
     """Build ACP ``mcpServers`` payload for ``new_session``.
 
     The ACP client expects a list of server objects, while DeerFlow's MCP helper
@@ -73,6 +73,8 @@ def _build_acp_mcp_servers() -> list[dict[str, Any]]:
 
     mcp_servers: list[dict[str, Any]] = []
     for name, server_config in enabled_servers.items():
+        if allowed_servers is not None and name not in allowed_servers:
+            continue
         transport_type = server_config.type or "stdio"
         payload: dict[str, Any] = {"name": name, "type": transport_type}
 
@@ -137,7 +139,7 @@ def _format_invocation_error(agent: str, cmd: str, exc: Exception) -> str:
     return f"{message} Install the agent binary or update `acp_agents.{agent}.command` in config.yaml."
 
 
-def build_invoke_acp_agent_tool(agents: dict) -> BaseTool:
+def build_invoke_acp_agent_tool(agents: dict, *, mcp_servers: list[str] | None = None) -> BaseTool:
     """Create the ``invoke_acp_agent`` tool with a description generated from configured agents.
 
     The tool description includes the list of available agents so that the LLM
@@ -162,6 +164,7 @@ def build_invoke_acp_agent_tool(agents: dict) -> BaseTool:
 
     # Capture agents in closure so the function can reference it
     _agents = dict(agents)
+    allowed_mcp_servers = mcp_servers
 
     async def _invoke(agent: str, prompt: str, config: Annotated[RunnableConfig, InjectedToolArg] = None) -> str:
         logger.info("Invoking ACP agent %s (prompt length: %d)", agent, len(prompt))
@@ -212,14 +215,17 @@ def build_invoke_acp_agent_tool(agents: dict) -> BaseTool:
         args = agent_config.args or []
         physical_cwd = _get_work_dir(thread_id)
         try:
-            mcp_servers = _build_acp_mcp_servers()
+            if allowed_mcp_servers is None:
+                acp_mcp_servers = _build_acp_mcp_servers()
+            else:
+                acp_mcp_servers = _build_acp_mcp_servers(set(allowed_mcp_servers))
         except ValueError as exc:
             logger.warning(
                 "Invalid MCP server configuration for ACP agent '%s'; continuing without MCP servers: %s",
                 agent,
                 exc,
             )
-            mcp_servers = []
+            acp_mcp_servers = []
         agent_env: dict[str, str] | None = None
         if agent_config.env:
             agent_env = {k: (os.environ.get(v[1:], "") if v.startswith("$") else v) for k, v in agent_config.env.items()}
@@ -234,7 +240,7 @@ def build_invoke_acp_agent_tool(agents: dict) -> BaseTool:
                     client_capabilities=ClientCapabilities(),
                     client_info=Implementation(name="deerflow", title="DeerFlow", version="0.1.0"),
                 )
-                session_kwargs: dict[str, Any] = {"cwd": physical_cwd, "mcp_servers": mcp_servers}
+                session_kwargs: dict[str, Any] = {"cwd": physical_cwd, "mcp_servers": acp_mcp_servers}
                 if agent_config.model:
                     session_kwargs["model"] = agent_config.model
                 session = await conn.new_session(**session_kwargs)

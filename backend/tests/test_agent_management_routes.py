@@ -36,6 +36,7 @@ def test_local_agent_management_routes_are_incremental_and_exclude_other_catalog
         ("/api/agents/{name}/stats", "GET"),
         ("/api/agents/{name}/files", "GET"),
         ("/api/agents/{name}/files", "PUT"),
+        ("/api/agents/{name}/settings", "PUT"),
         ("/api/agents/{name}/export", "GET"),
         ("/api/agents/batch/export", "POST"),
         ("/api/agents/import", "POST"),

@@ -29,7 +29,12 @@ from app.gateway.deps import (
     get_scheduled_task_service,
     get_thread_store,
 )
-from app.gateway.routers.agents import AgentResponse, _require_agents_api_enabled
+from app.gateway.routers.agents import (
+    AgentResponse,
+    AgentUpdateRequest,
+    _require_agents_api_enabled,
+    _validate_model_exists,
+)
 from deerflow.agents.lead_agent.prompt import refresh_user_skills_system_prompt_cache_async
 from deerflow.agents.memory import get_memory_manager
 from deerflow.config.app_config import get_app_config
@@ -347,6 +352,27 @@ async def update_agent_files(name: str, body: AgentFilesUpdateRequest, scope: Ag
             "owner_id": get_effective_user_id(),
             "can_manage": True,
         }
+    except Exception as exc:
+        raise _http_error(exc) from exc
+
+
+@router.put("/agents/{name}/settings")
+async def update_agent_settings(
+    name: str,
+    body: AgentUpdateRequest,
+    scope: AgentScope = "user",
+) -> AgentResponse:
+    """Update structured agent settings in either the user or platform store."""
+    _require_agents_api_enabled()
+    if "model" in body.model_fields_set:
+        _validate_model_exists(body.model)
+    try:
+        data = await asyncio.to_thread(
+            _service(scope).update_settings,
+            name,
+            body.model_dump(exclude_unset=True),
+        )
+        return _agent_response(data)
     except Exception as exc:
         raise _http_error(exc) from exc
 

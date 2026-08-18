@@ -172,6 +172,26 @@ class AgentManagementService:
         self.store.update(normalized, config_document, soul, user_id=self.user_id)
         return self.describe(normalized)
 
+    def update_settings(self, name: str, updates: dict[str, Any]) -> dict[str, Any]:
+        """Update the structured settings while preserving unmanaged config."""
+        normalized, current, _ = self._get(name)
+        document = self._document(normalized, current)
+        guide_questions = document.pop("ui", None)
+
+        for key, value in updates.items():
+            if value is None:
+                document.pop(key, None)
+            else:
+                document[key] = value
+
+        document["name"] = normalized
+        validated = AgentConfig(**document)
+        config_document = _config_document(validated, name=normalized)
+        if guide_questions is not None:
+            config_document["ui"] = guide_questions
+        self.store.update(normalized, config_document, None, user_id=self.user_id)
+        return self.describe(normalized)
+
     def validate_agent(self, name: str) -> dict[str, Any]:
         normalized, config, soul = self._get(name)
         checks: list[dict[str, str]] = [

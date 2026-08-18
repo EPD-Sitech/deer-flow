@@ -113,6 +113,24 @@ class TestAgentConfig:
         assert cfg.name == "test-agent"
         assert cfg.model == "gpt-4"
         assert cfg.tool_groups is None
+        assert cfg.mcp_servers is None
+
+    def test_config_with_mcp_server_allowlist(self):
+        from deerflow.config.agents_config import AgentConfig
+
+        cfg = AgentConfig(name="mcp-restricted", mcp_servers=["analytics", "files"])
+
+        assert cfg.mcp_servers == ["analytics", "files"]
+
+    def test_config_rejects_empty_or_duplicate_mcp_server_names(self):
+        from pydantic import ValidationError
+
+        from deerflow.config.agents_config import AgentConfig
+
+        with pytest.raises(ValidationError):
+            AgentConfig(name="empty-mcp", mcp_servers=[""])
+        with pytest.raises(ValidationError):
+            AgentConfig(name="duplicate-mcp", mcp_servers=["analytics", "analytics"])
 
 
 # ===========================================================================
@@ -175,6 +193,17 @@ class TestLoadAgentConfig:
             cfg = load_agent_config("restricted")
 
         assert cfg.tool_groups == ["file:read", "file:write"]
+
+    def test_load_config_with_mcp_servers(self, tmp_path):
+        config_dict = {"name": "mcp-restricted", "mcp_servers": ["analytics"]}
+        _write_agent(tmp_path, "mcp-restricted", config_dict)
+
+        with patch("deerflow.config.agents_config.get_paths", return_value=_make_paths(tmp_path)):
+            from deerflow.config.agents_config import load_agent_config
+
+            cfg = load_agent_config("mcp-restricted")
+
+        assert cfg.mcp_servers == ["analytics"]
 
     def test_load_config_with_skills_empty_list(self, tmp_path):
         config_dict = {"name": "no-skills-agent", "skills": []}
@@ -785,6 +814,38 @@ class TestAgentsAPI:
         data = response.json()
         assert data["model"] == "deepseek-v3"
         assert data["tool_groups"] == ["file:read", "bash"]
+
+    def test_create_and_update_agent_mcp_server_allowlist(self, agent_client):
+        response = agent_client.post(
+            "/api/agents",
+            json={"name": "mcp-agent", "mcp_servers": ["analytics"], "soul": "mcp restricted"},
+        )
+
+        assert response.status_code == 201
+        assert response.json()["mcp_servers"] == ["analytics"]
+
+        response = agent_client.put("/api/agents/mcp-agent", json={"description": "still restricted"})
+
+        assert response.status_code == 200
+        assert response.json()["mcp_servers"] == ["analytics"]
+
+        response = agent_client.put("/api/agents/mcp-agent", json={"mcp_servers": []})
+
+        assert response.status_code == 200
+        assert response.json()["mcp_servers"] == []
+
+        response = agent_client.put("/api/agents/mcp-agent", json={"mcp_servers": None})
+
+        assert response.status_code == 200
+        assert response.json()["mcp_servers"] is None
+
+    def test_create_agent_rejects_invalid_mcp_server_allowlist(self, agent_client):
+        response = agent_client.post(
+            "/api/agents",
+            json={"name": "bad-mcp-agent", "mcp_servers": ["analytics", "analytics"]},
+        )
+
+        assert response.status_code == 422
 
     def test_create_persists_files_on_disk(self, agent_client, tmp_path):
         agent_client.post("/api/agents", json={"name": "disk-check", "soul": "disk soul"})

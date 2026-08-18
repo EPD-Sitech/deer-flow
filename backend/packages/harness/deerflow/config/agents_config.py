@@ -195,6 +195,10 @@ class AgentConfig(BaseModel):
     description: str = ""
     model: str | None = None
     tool_groups: list[str] | None = None
+    # MCP server allowlist. None preserves the historical behavior (all
+    # enabled servers); [] disables MCP tools; a non-empty list permits only
+    # tools produced by the named servers.
+    mcp_servers: list[str] | None = None
     # skills controls which skills are discoverable and may be activated by the
     # agent. It does not activate their allowed-tools policies at construction:
     # - None (or omitted): load all enabled skills (default fallback behavior)
@@ -215,6 +219,17 @@ class AgentConfig(BaseModel):
     # integration", which is the case for every existing agent.
     github: GitHubAgentConfig | None = None
 
+    @field_validator("mcp_servers")
+    @classmethod
+    def _validate_mcp_servers(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if any(not isinstance(name, str) or not name.strip() for name in value):
+            raise ValueError("mcp_servers must contain only non-empty server names")
+        if len(value) != len(set(value)):
+            raise ValueError("mcp_servers must not contain duplicate server names")
+        return value
+
 
 # Fields explicitly managed by agent-update surfaces. Anything else declared
 # on :class:`AgentConfig` — currently ``github``, and any future field — is
@@ -231,6 +246,7 @@ MANAGED_AGENT_CONFIG_FIELDS: frozenset[str] = frozenset(
         "description",
         "model",
         "tool_groups",
+        "mcp_servers",
         "skills",
         "model_settings",
         "thinking_enabled",

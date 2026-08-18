@@ -157,6 +157,38 @@ def test_describe_exposes_complete_editable_agent_document(service: AgentManagem
     assert details["soul"].startswith("# Identity")
 
 
+def test_structured_settings_update_preserves_soul_and_guide_questions(
+    service: AgentManagementService,
+) -> None:
+    updated = service.update_settings(
+        "writer",
+        {
+            "description": "Updated reports",
+            "skills": ["research", "documents"],
+            "mcp_servers": ["postgres"],
+            "model_settings": {"temperature": 0.3, "max_tokens": 2048},
+        },
+    )
+
+    assert updated["description"] == "Updated reports"
+    assert updated["skills"] == ["research", "documents"]
+    assert updated["mcp_servers"] == ["postgres"]
+    assert updated["model_settings"] == {"temperature": 0.3, "max_tokens": 2048}
+    assert updated["ui"]["guide_questions"] == [{"question": "分析这份报告"}]
+    assert updated["soul"].startswith("# Identity")
+
+    empty = service.update_settings("writer", {"skills": [], "mcp_servers": []})
+    assert empty["skills"] == []
+    assert empty["mcp_servers"] == []
+
+    inherited = service.update_settings("writer", {"skills": None, "model_settings": None})
+    assert "skills" not in inherited
+    assert "model_settings" not in inherited
+    assert inherited["mcp_servers"] == []
+    assert inherited["ui"] == updated["ui"]
+    assert inherited["soul"] == updated["soul"]
+
+
 def test_admin_can_manage_and_preserve_guide_questions(service: AgentManagementService) -> None:
     config = yaml.safe_dump(
         {
@@ -371,6 +403,8 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
             {
                 "name": "public-researcher",
                 "description": "Shared research Agent",
+                "skills": ["research"],
+                "mcp_servers": ["postgres"],
                 "ui": {"guide_questions": [{"question": "研究这份报告"}]},
             }
         ),
@@ -390,6 +424,8 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
     assert catalog[1]["can_share"] is False
     assert catalog[1]["can_batch"] is False
     assert catalog[1]["runtime_name"] == "public-researcher"
+    assert catalog[1]["skills"] == ["research"]
+    assert catalog[1]["mcp_servers"] == ["postgres"]
     assert catalog[1]["guide_questions"] == [{"question": "研究这份报告"}]
     assert catalog[0]["can_share"] is False
 

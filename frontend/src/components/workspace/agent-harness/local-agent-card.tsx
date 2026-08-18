@@ -318,9 +318,7 @@ export function LocalAgentCard({
                 {canShare && (
                   <DropdownMenuItem onSelect={() => setShareOpen(true)}>
                     <Share2Icon />
-                    {locale.startsWith("zh")
-                      ? "分享公开链接"
-                      : "Share public link"}
+                    {locale.startsWith("zh") ? "分享" : "Share"}
                   </DropdownMenuItem>
                 )}
                 {canEdit && (
@@ -331,7 +329,7 @@ export function LocalAgentCard({
                     }}
                   >
                     <FileEditIcon />
-                    {locale.startsWith("zh") ? "详情编辑" : "Details & edit"}
+                    {locale.startsWith("zh") ? "编辑" : "Edit"}
                   </DropdownMenuItem>
                 )}
                 {canViewDetails && !canEdit && (
@@ -353,7 +351,7 @@ export function LocalAgentCard({
                     }}
                   >
                     <CalendarClockIcon />
-                    {locale.startsWith("zh") ? "定时任务" : "Schedules"}
+                    {locale.startsWith("zh") ? "定时" : "Schedule"}
                   </DropdownMenuItem>
                 )}
                 {canClone && (
@@ -368,30 +366,17 @@ export function LocalAgentCard({
                   </DropdownMenuItem>
                 )}
                 {canExport && (
-                  <>
-                    <DropdownMenuItem onSelect={() => void handleExport("zip")}>
-                      <DownloadIcon />
-                      {locale.startsWith("zh") ? "导出 ZIP" : "Export ZIP"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void handleExport("md")}>
-                      <DownloadIcon />
-                      {locale.startsWith("zh")
-                        ? "导出 Markdown"
-                        : "Export Markdown"}
-                    </DropdownMenuItem>
-                  </>
+                  <DropdownMenuItem onSelect={() => void handleExport("zip")}>
+                    <DownloadIcon />
+                    {locale.startsWith("zh") ? "导出" : "Export"}
+                  </DropdownMenuItem>
                 )}
                 {canEdit && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onSelect={() => {
-                        if (isPlatform) {
-                          setDetailTab("files");
-                          setDetailOpen(true);
-                        } else {
-                          setSettingsOpen(true);
-                        }
+                        setSettingsOpen(true);
                       }}
                     >
                       <SettingsIcon />
@@ -417,11 +402,12 @@ export function LocalAgentCard({
         </div>
       </Card>
 
-      {settingsOpen && !isPlatform && (
+      {settingsOpen && (
         <AgentSettingsDialog
           agent={agent}
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
+          scope={scope}
         />
       )}
 

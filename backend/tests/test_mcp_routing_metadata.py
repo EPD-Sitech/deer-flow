@@ -9,7 +9,7 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from deerflow.config.extensions_config import ExtensionsConfig
-from deerflow.tools.mcp_metadata import MCP_TOOL_METADATA_KEY, MCP_TOOL_ROUTING_METADATA_KEY, get_mcp_routing, tag_mcp_routing, tag_mcp_tool
+from deerflow.tools.mcp_metadata import MCP_TOOL_METADATA_KEY, MCP_TOOL_ROUTING_METADATA_KEY, get_mcp_routing, get_mcp_server_name, tag_mcp_routing, tag_mcp_tool
 
 
 class _Args(BaseModel):
@@ -118,5 +118,6 @@ async def test_get_mcp_tools_tags_effective_routing_metadata(transport: str):
 
     routing = get_mcp_routing(tools[0])
     assert routing is not None
+    assert get_mcp_server_name(tools[0]) == "postgres"
     assert routing["priority"] == 100
     assert routing["keywords"] == ["查库"]

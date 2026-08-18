@@ -7,7 +7,7 @@ from deerflow.config.app_config import AppConfig
 from deerflow.reflection import resolve_variable
 from deerflow.sandbox.security import is_host_bash_allowed
 from deerflow.tools.builtins import ask_clarification_tool, list_uploaded_files, present_file_tool, review_skill_package, task_tool, view_image_tool
-from deerflow.tools.mcp_metadata import tag_mcp_tool
+from deerflow.tools.mcp_metadata import get_mcp_server_name, is_mcp_tool, tag_mcp_tool
 from deerflow.tools.sync import make_sync_tool_wrapper
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ def get_available_tools(
     model_name: str | None = None,
     subagent_enabled: bool = False,
     *,
+    mcp_servers: list[str] | None = None,
     include_upload_tool: bool = True,
     app_config: AppConfig | None = None,
 ) -> list[BaseTool]:
@@ -59,6 +60,9 @@ def get_available_tools(
     Args:
         groups: Optional list of tool groups to filter by.
         include_mcp: Whether to include tools from MCP servers (default: True).
+        mcp_servers: Optional MCP server allowlist. ``None`` keeps all enabled
+            servers; an empty list disables MCP tools; otherwise only tools
+            produced by the named servers are included.
         model_name: Optional model name to determine if vision tools should be included.
         subagent_enabled: Whether to include subagent tools (task, task_status).
         include_upload_tool: Whether to include ``list_uploaded_files`` (default: True).
@@ -141,6 +145,10 @@ def get_available_tools(
                     # policy-filtered list because their skills load at startup.
                     for t in mcp_tools:
                         tag_mcp_tool(t)
+                    if mcp_servers is not None:
+                        allowed_mcp_servers = set(mcp_servers)
+                        mcp_tools = [t for t in mcp_tools if is_mcp_tool(t) and get_mcp_server_name(t) in allowed_mcp_servers]
+                        logger.info("MCP server allowlist retained %d tool(s) from %s", len(mcp_tools), mcp_servers)
         except ImportError:
             logger.warning("MCP module not available. Install 'langchain-mcp-adapters' package to enable MCP tools.")
         except Exception as e:
@@ -158,7 +166,10 @@ def get_available_tools(
         else:
             acp_agents = getattr(config, "acp_agents", {}) or {}
         if acp_agents:
-            acp_tools.append(build_invoke_acp_agent_tool(acp_agents))
+            if mcp_servers is None:
+                acp_tools.append(build_invoke_acp_agent_tool(acp_agents))
+            else:
+                acp_tools.append(build_invoke_acp_agent_tool(acp_agents, mcp_servers=mcp_servers))
             logger.info(f"Including invoke_acp_agent tool ({len(acp_agents)} agent(s): {list(acp_agents.keys())})")
     except Exception as e:
         logger.warning(f"Failed to load ACP tool: {e}")

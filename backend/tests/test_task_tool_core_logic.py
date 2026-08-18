@@ -740,6 +740,49 @@ def test_task_tool_propagates_tool_groups_to_subagent(monkeypatch):
     get_available_tools.assert_called_once_with(model_name="ark-model", groups=parent_tool_groups, subagent_enabled=False, include_upload_tool=False)
 
 
+def test_task_tool_propagates_mcp_server_allowlist_to_subagent(monkeypatch):
+    config = _make_subagent_config()
+    runtime = _make_runtime()
+    runtime.config["metadata"]["mcp_servers"] = ["analytics"]
+    events = []
+    get_available_tools = MagicMock(return_value=[])
+
+    class DummyExecutor:
+        def __init__(self, **kwargs):
+            pass
+
+        def execute_async(self, prompt, task_id=None):
+            return task_id or "generated-task-id"
+
+    monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", DummyExecutor)
+    monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: config)
+    monkeypatch.setattr(
+        task_tool_module,
+        "get_background_task_result",
+        lambda _: _make_result(FakeSubagentStatus.COMPLETED, result="ok"),
+    )
+    monkeypatch.setattr(task_tool_module, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(task_tool_module.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr("deerflow.tools.get_available_tools", get_available_tools)
+
+    _run_task_tool(
+        runtime=runtime,
+        description="restricted MCP work",
+        prompt="query analytics",
+        subagent_type="general-purpose",
+        tool_call_id="tc-mcp-servers",
+    )
+
+    get_available_tools.assert_called_once_with(
+        model_name="ark-model",
+        groups=None,
+        subagent_enabled=False,
+        include_upload_tool=False,
+        mcp_servers=["analytics"],
+    )
+
+
 def test_task_tool_uses_subagent_model_override_for_tool_loading(monkeypatch):
     """Subagent model overrides should drive model-gated tool loading."""
     config = SubagentConfig(

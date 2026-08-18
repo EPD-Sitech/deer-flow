@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIcon,
   BotIcon,
@@ -36,8 +37,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdateAgent } from "@/core/agents";
-import type { Agent, ReasoningEffort, SubAgentInfo } from "@/core/agents";
+import type {
+  Agent,
+  ReasoningEffort,
+  SubAgentInfo,
+  UpdateAgentRequest,
+} from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 import { useMCPConfig } from "@/core/mcp/hooks";
 import { useModels } from "@/core/models/hooks";
@@ -52,8 +57,10 @@ import {
   listAgentVersions,
   restoreAgentVersion,
   testAgent,
+  updateAgentSettings,
   validateAgent,
   type AgentLog,
+  type AgentScope,
   type AgentStats,
   type AgentTestResult,
   type AgentVersion,
@@ -84,6 +91,7 @@ interface AgentSettingsDialogProps {
   agent: Agent;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  scope?: AgentScope;
 }
 
 function SettingsSection({
@@ -127,7 +135,7 @@ function SettingsSection({
         />
       </button>
       {open && (
-        <div className="border-border border-t bg-muted/20 px-3.5 py-3">
+        <div className="border-border bg-muted/20 border-t px-3.5 py-3">
           {children}
         </div>
       )}
@@ -135,7 +143,13 @@ function SettingsSection({
   );
 }
 
-function StatMetric({ label, value }: { label: string; value: string | number }) {
+function StatMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
     <div className="border-border bg-background rounded-md border p-2 text-center">
       <p className="text-foreground text-sm font-semibold">{value}</p>
@@ -153,12 +167,14 @@ export function AgentSettingsDialog({
   agent,
   open,
   onOpenChange,
+  scope = "user",
 }: AgentSettingsDialogProps) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const { models } = useModels();
   const { skills: skillsData, isLoading: skillsLoading } = useSkills();
   const { config: mcpConfig, isLoading: mcpLoading } = useMCPConfig();
-  const updateAgent = useUpdateAgent();
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   const [description, setDescription] = useState(agent.description ?? "");
   const [model, setModel] = useState(agent.model ?? DEFAULT_MODEL_VALUE);
@@ -272,7 +288,7 @@ export function AgentSettingsDialog({
   async function loadVersions() {
     setVersionsLoading(true);
     try {
-      setVersions(await listAgentVersions(agent.name));
+      setVersions(await listAgentVersions(agent.name, scope));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -283,7 +299,7 @@ export function AgentSettingsDialog({
   async function handleCreateVersion() {
     setVersionAction(true);
     try {
-      await createAgentVersion(agent.name, versionMessage.trim());
+      await createAgentVersion(agent.name, versionMessage.trim(), scope);
       setVersionMessage("");
       await loadVersions();
       toast.success("版本快照已创建");
@@ -298,7 +314,7 @@ export function AgentSettingsDialog({
     if (!window.confirm("恢复到这个版本？当前状态会自动创建快照。")) return;
     setVersionAction(true);
     try {
-      await restoreAgentVersion(agent.name, versionId);
+      await restoreAgentVersion(agent.name, versionId, scope);
       await loadVersions();
       toast.success("版本已恢复");
     } catch (error) {
@@ -311,7 +327,7 @@ export function AgentSettingsDialog({
   async function handleValidate() {
     setDebugLoading(true);
     try {
-      setValidation(await validateAgent(agent.name));
+      setValidation(await validateAgent(agent.name, scope));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -322,7 +338,7 @@ export function AgentSettingsDialog({
   async function handleTest() {
     setDebugLoading(true);
     try {
-      setTestResult(await testAgent(agent.name, testPrompt));
+      setTestResult(await testAgent(agent.name, testPrompt, scope));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -334,8 +350,8 @@ export function AgentSettingsDialog({
     setActivityLoading(true);
     try {
       const [nextStats, nextLogs] = await Promise.all([
-        getAgentStats(agent.name),
-        getAgentLogs(agent.name),
+        getAgentStats(agent.name, scope),
+        getAgentLogs(agent.name, scope),
       ]);
       setStats(nextStats);
       setLogs(nextLogs);
@@ -360,32 +376,31 @@ export function AgentSettingsDialog({
       return;
     }
 
+    const request: UpdateAgentRequest = {
+      description: description.trim() || null,
+      model: model === DEFAULT_MODEL_VALUE ? null : model,
+      model_settings: parsedSettings.modelSettings,
+      thinking_enabled: supportsThinking
+        ? selectionToThinkingEnabled(thinking)
+        : null,
+      reasoning_effort:
+        supportsReasoningEffort && reasoningEffort !== INHERIT_VALUE
+          ? (reasoningEffort as ReasoningEffort)
+          : null,
+      skills: [...selectedSkills].sort(),
+      mcp_servers: [...selectedMcpServers].sort(),
+    };
+
+    setSettingsSaving(true);
     try {
-      await updateAgent.mutateAsync({
-        name: agent.name,
-        request: {
-          description: description.trim() || null,
-          model: model === DEFAULT_MODEL_VALUE ? null : model,
-          model_settings: parsedSettings.modelSettings,
-          thinking_enabled: supportsThinking
-            ? selectionToThinkingEnabled(thinking)
-            : null,
-          reasoning_effort:
-            supportsReasoningEffort && reasoningEffort !== INHERIT_VALUE
-              ? (reasoningEffort as ReasoningEffort)
-              : null,
-          skills:
-            selectedSkills.size > 0 ? [...selectedSkills].sort() : null,
-          mcp_servers:
-            selectedMcpServers.size > 0
-              ? [...selectedMcpServers].sort()
-              : null,
-        },
-      });
+      await updateAgentSettings(agent.name, request, scope);
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success(t.agents.settingsSaved);
       onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSettingsSaving(false);
     }
   }
 
@@ -437,9 +452,7 @@ export function AgentSettingsDialog({
             title="模型与生成参数"
             description={t.agents.settingsModel}
             open={sectionOpen.model}
-            onToggle={() =>
-              setSectionOpen((s) => ({ ...s, model: !s.model }))
-            }
+            onToggle={() => setSectionOpen((s) => ({ ...s, model: !s.model }))}
           >
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -613,9 +626,7 @@ export function AgentSettingsDialog({
             title="个性化 MCP"
             description={`${selectedMcpServers.size} 个已绑定`}
             open={sectionOpen.mcp}
-            onToggle={() =>
-              setSectionOpen((s) => ({ ...s, mcp: !s.mcp }))
-            }
+            onToggle={() => setSectionOpen((s) => ({ ...s, mcp: !s.mcp }))}
           >
             {mcpLoading ? (
               <p className="text-muted-foreground text-xs">加载中...</p>
@@ -754,7 +765,10 @@ export function AgentSettingsDialog({
               ) : (
                 <div className="divide-y border-y">
                   {versions.map((version) => (
-                    <div key={version.version_id} className="flex items-center gap-2 py-2">
+                    <div
+                      key={version.version_id}
+                      className="flex items-center gap-2 py-2"
+                    >
                       <HistoryIcon className="text-muted-foreground size-3.5 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium">
@@ -769,7 +783,9 @@ export function AgentSettingsDialog({
                         variant="outline"
                         className="h-7 text-xs"
                         disabled={versionAction}
-                        onClick={() => void handleRestoreVersion(version.version_id)}
+                        onClick={() =>
+                          void handleRestoreVersion(version.version_id)
+                        }
                       >
                         <RotateCcwIcon className="mr-1 size-3.5" /> 恢复
                       </Button>
@@ -785,9 +801,7 @@ export function AgentSettingsDialog({
             title="调试"
             description="校验配置并测试专家响应"
             open={sectionOpen.debug}
-            onToggle={() =>
-              setSectionOpen((s) => ({ ...s, debug: !s.debug }))
-            }
+            onToggle={() => setSectionOpen((s) => ({ ...s, debug: !s.debug }))}
           >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -815,7 +829,10 @@ export function AgentSettingsDialog({
               {validation && (
                 <div className="divide-y border-y">
                   {validation.checks.map((check) => (
-                    <div key={check.check} className="flex gap-2 py-1.5 text-xs">
+                    <div
+                      key={check.check}
+                      className="flex gap-2 py-1.5 text-xs"
+                    >
                       {check.status === "error" ? (
                         <XCircleIcon className="text-destructive mt-0.5 size-3.5 shrink-0" />
                       ) : (
@@ -850,7 +867,9 @@ export function AgentSettingsDialog({
                     {testResult.response}
                   </p>
                   <p className="text-muted-foreground mt-2 text-[10px]">
-                    {testResult.metadata.model_used} · {testResult.metadata.tokens_used} tokens · {testResult.metadata.latency_ms} ms
+                    {testResult.metadata.model_used} ·{" "}
+                    {testResult.metadata.tokens_used} tokens ·{" "}
+                    {testResult.metadata.latency_ms} ms
                   </p>
                 </div>
               )}
@@ -876,7 +895,10 @@ export function AgentSettingsDialog({
                   <StatMetric label="调用" value={stats.total_calls} />
                   <StatMetric label="成功" value={stats.success_count} />
                   <StatMetric label="失败" value={stats.error_count} />
-                  <StatMetric label="平均耗时" value={`${stats.avg_latency_ms}ms`} />
+                  <StatMetric
+                    label="平均耗时"
+                    value={`${stats.avg_latency_ms}ms`}
+                  />
                   <StatMetric label="Tokens" value={stats.total_tokens} />
                 </div>
                 {logs.length === 0 ? (
@@ -884,15 +906,27 @@ export function AgentSettingsDialog({
                 ) : (
                   <div className="divide-y border-y">
                     {logs.map((log, index) => (
-                      <div key={`${log.thread_id}-${index}`} className="py-2 text-xs">
+                      <div
+                        key={`${log.thread_id}-${index}`}
+                        className="py-2 text-xs"
+                      >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-medium">{log.user_query || "（无输入）"}</span>
-                          <span className={log.status === "success" ? "text-emerald-600" : "text-destructive"}>
+                          <span className="truncate font-medium">
+                            {log.user_query || "（无输入）"}
+                          </span>
+                          <span
+                            className={
+                              log.status === "success"
+                                ? "text-emerald-600"
+                                : "text-destructive"
+                            }
+                          >
                             {log.status}
                           </span>
                         </div>
                         <p className="text-muted-foreground mt-1 truncate text-[10px]">
-                          {log.timestamp ?? ""} · {log.tokens_used} tokens · {log.latency_ms} ms
+                          {log.timestamp ?? ""} · {log.tokens_used} tokens ·{" "}
+                          {log.latency_ms} ms
                         </p>
                       </div>
                     ))}
@@ -903,16 +937,16 @@ export function AgentSettingsDialog({
           </SettingsSection>
         </div>
 
-        <DialogFooter className="border-border shrink-0 border-t bg-background px-5 py-3.5">
+        <DialogFooter className="border-border bg-background shrink-0 border-t px-5 py-3.5">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={updateAgent.isPending}
+            disabled={settingsSaving}
           >
             {t.common.cancel}
           </Button>
-          <Button onClick={handleSave} disabled={updateAgent.isPending}>
-            {updateAgent.isPending ? t.common.loading : t.common.save}
+          <Button onClick={handleSave} disabled={settingsSaving}>
+            {settingsSaving ? t.common.loading : t.common.save}
           </Button>
         </DialogFooter>
       </DialogContent>

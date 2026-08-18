@@ -187,7 +187,10 @@ async def test_invoke_acp_agent_uses_fixed_acp_workspace(monkeypatch, tmp_path):
         "deerflow.config.extensions_config.ExtensionsConfig.from_file",
         classmethod(
             lambda cls: ExtensionsConfig(
-                mcp_servers={"github": McpServerConfig(enabled=True, type="stdio", command="npx", args=["github-mcp"])},
+                mcp_servers={
+                    "github": McpServerConfig(enabled=True, type="stdio", command="npx", args=["github-mcp"]),
+                    "analytics": McpServerConfig(enabled=True, type="stdio", command="npx", args=["analytics-mcp"]),
+                },
                 skills={},
             )
         ),
@@ -278,7 +281,8 @@ async def test_invoke_acp_agent_uses_fixed_acp_workspace(monkeypatch, tmp_path):
                 description="Codex CLI",
                 model="gpt-5-codex",
             )
-        }
+        },
+        mcp_servers=["github"],
     )
 
     try:

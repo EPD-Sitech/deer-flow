@@ -712,6 +712,8 @@ So we rebuilt it from scratch.
 
 DeerFlow 2.0 is no longer a framework you wire together. It's a super agent harness — batteries included, fully extensible. Built on LangGraph and LangChain, it ships with everything an agent needs out of the box: a filesystem, memory, skills, sandbox-aware execution, and the ability to plan and spawn sub-agents for complex, multi-step tasks.
 
+Workspace administrators manage both public and custom Agents through the same settings dialog. Agent actions include sharing, editing, scheduling, cloning, exporting, settings, and deletion; model behavior, skills, MCP servers, versions, validation, testing, and activity stay scoped to the selected Agent's public or user-owned storage.
+
 Use it as-is. Or tear it apart and make it yours.
 
 ## Core Features
@@ -729,6 +731,14 @@ A skill directory is a package boundary: once DeerFlow finds its `SKILL.md`, nes
 Users can explicitly activate an enabled skill for a single turn by starting the request with `/skill-name`, for example `/data-analysis analyze uploads/foo.csv`. DeerFlow loads that skill's `SKILL.md` as hidden current-turn context while leaving the base prompt limited to skill metadata. Slash activation respects disabled skills, custom-agent skill whitelists, and existing channel commands such as `/new` and `/help`.
 
 An enabled skill's `allowed-tools` policy applies only after that skill is explicitly slash-activated or captured in the agent's active skill context after a `read_file` load. Merely enabling, advertising, or listing a skill in a custom agent or subagent `skills` allowlist does not reduce that agent's normal toolset; subagents use the same progressive discovery and activation policy as the lead agent. During a slash-activated run, that explicit skill's policy is authoritative: reading another `SKILL.md` may provide instructions but cannot widen the slash skill's tools. Without slash activation, policies from skills actually loaded into active context retain their union semantics. Once active, the policy filters both model-visible tool schemas and tool execution. Framework discovery tools (`tool_search` and `describe_skill`) remain available so an allowed deferred tool or installed skill can still be discovered, but discovery and promotion never grant permission to execute a business tool omitted from `allowed-tools`. `task` is not framework-exempt; a restrictive skill must list it explicitly to delegate to a subagent. Per-step policy decisions are internal runtime context and are removed from observable or persisted context copies. Registry failures and an active set with no remaining valid skill fail closed to framework-safe tools; individual stale paths are ignored only when another valid active skill remains. This is best-effort behavioral scoping, not a hard security boundary: loading skill instructions through another tool is not captured, and active-skill entries can be evicted from bounded context.
+
+Custom agents can apply the same explicit scoping to MCP servers with
+`mcp_servers` in the agent's `config.yaml`. Omit it (or use `null`) to keep
+all enabled MCP servers available, use `[]` to disable MCP tools, or list
+server names to expose only those servers. This is a hard tool-availability
+allowlist inherited by delegated sub-agents and ACP sessions; `routing` in
+`extensions_config.json` remains only a soft preference when no allowlist is
+set. See [MCP server configuration](backend/docs/MCP_SERVER.md) for details.
 
 When you install `.skill` archives through the Gateway, DeerFlow accepts standard optional frontmatter metadata such as `version`, `author`, and `compatibility` instead of rejecting otherwise valid external skills.
 

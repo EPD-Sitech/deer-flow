@@ -1,4 +1,4 @@
-import type { Agent } from "@/core/agents";
+import type { Agent, UpdateAgentRequest } from "@/core/agents";
 import { fetch as authenticatedFetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
@@ -165,6 +165,20 @@ export function updateAgentFiles(
   return jsonRequest<AgentFiles>(
     withScope(`/api/agents/${encodeURIComponent(name)}/files`, scope),
     { ...jsonBody(files), method: "PUT" },
+  );
+}
+
+export function updateAgentSettings(
+  name: string,
+  settings: UpdateAgentRequest,
+  scope: AgentScope = "user",
+) {
+  return jsonRequest<Agent>(
+    withScope(`/api/agents/${encodeURIComponent(name)}/settings`, scope),
+    {
+      ...jsonBody(settings),
+      method: "PUT",
+    },
   );
 }
 

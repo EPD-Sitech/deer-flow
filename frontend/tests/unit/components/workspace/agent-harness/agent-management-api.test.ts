@@ -6,6 +6,7 @@ import {
   importAgent,
   updateAgentShare,
   updateAgentFiles,
+  updateAgentSettings,
 } from "@/components/workspace/agent-harness/agent-management-api";
 
 const fetchMock = rs.hoisted(() => rs.fn());
@@ -62,6 +63,37 @@ describe("local agent management API", () => {
     expect(JSON.parse(request.body as string)).toEqual({
       config_yaml: "name: report-agent\n",
       soul: "# Reporter",
+    });
+  });
+
+  it("updates public Agent settings through the scoped management route", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "public-agent",
+          description: "Updated",
+          model: null,
+          tool_groups: null,
+          skills: ["research"],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await updateAgentSettings(
+      "public agent",
+      { description: "Updated", skills: ["research"] },
+      "platform",
+    );
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://gateway/api/agents/public%20agent/settings?scope=platform",
+    );
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe("PUT");
+    expect(JSON.parse(request.body as string)).toEqual({
+      description: "Updated",
+      skills: ["research"],
     });
   });
 

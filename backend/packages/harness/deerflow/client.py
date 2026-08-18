@@ -37,7 +37,7 @@ from deerflow.agents.lead_agent.agent import _authorize_model_name, build_middle
 from deerflow.agents.lead_agent.prompt import apply_prompt_template, get_enabled_skills_for_config
 from deerflow.agents.thread_state import get_thread_state_schema, normalize_middleware_state_schemas
 from deerflow.authz.principal import build_principal_from_context
-from deerflow.config.agents_config import AGENT_NAME_PATTERN
+from deerflow.config.agents_config import AGENT_NAME_PATTERN, load_agent_config
 from deerflow.config.app_config import get_app_config, is_trace_correlation_enabled, reload_app_config
 from deerflow.config.extensions_config import (
     ExtensionsConfig,
@@ -256,6 +256,23 @@ class DeerFlowClient:
         if context is not None:
             cfg.update(context)
 
+        effective_user_id = cfg.get("user_id") or get_effective_user_id()
+        agent_mcp_servers: list[str] | None = None
+        if self._agent_name:
+            try:
+                agent_mcp_servers = load_agent_config(
+                    self._agent_name,
+                    user_id=effective_user_id,
+                ).mcp_servers
+            except FileNotFoundError:
+                # Preserve the existing embedded-client behavior for callers
+                # that provide an agent name without a persisted config.
+                pass
+
+        metadata = dict(config.get("metadata") or {})
+        metadata["mcp_servers"] = agent_mcp_servers
+        config["metadata"] = metadata
+
         authorization_identity = None
         if self._app_config.authorization.enabled:
             principal = build_principal_from_context(
@@ -283,6 +300,7 @@ class DeerFlowClient:
             self._checkpoint_channel_mode,
             self._checkpoint_snapshot_frequency,
             authorization_identity,
+            tuple(agent_mcp_servers) if agent_mcp_servers is not None else None,
         )
 
         if self._agent is not None and self._agent_config_key == key:
@@ -304,7 +322,11 @@ class DeerFlowClient:
         max_concurrent_subagents = cfg.get("max_concurrent_subagents", 3)
         max_total_subagents = cfg.get("max_total_subagents", self._app_config.subagents.max_total_per_run)
 
-        tools = self._get_tools(model_name=model_name, subagent_enabled=subagent_enabled)
+        tools = self._get_tools(
+            model_name=model_name,
+            subagent_enabled=subagent_enabled,
+            mcp_servers=agent_mcp_servers,
+        )
 
         # Add framework-provided tools before authorization so Layer 1 sees
         # every capability that can become model-visible.
@@ -339,8 +361,6 @@ class DeerFlowClient:
             top_k=self._app_config.tool_search.auto_promote_top_k,
         )
         mcp_routing_hints_section = get_mcp_routing_hints_prompt_section(authorized_tools, deferred_names=deferred_setup.deferred_names)
-
-        effective_user_id = cfg.get("user_id") or get_effective_user_id()
 
         kwargs: dict[str, Any] = {
             # attach_tracing=False because ``stream()`` injects tracing
@@ -392,11 +412,20 @@ class DeerFlowClient:
         logger.info("Agent created: agent_name=%s, model=%s, thinking=%s", self._agent_name, model_name, thinking_enabled)
 
     @staticmethod
-    def _get_tools(*, model_name: str | None, subagent_enabled: bool):
+    def _get_tools(
+        *,
+        model_name: str | None,
+        subagent_enabled: bool,
+        mcp_servers: list[str] | None = None,
+    ):
         """Lazy import to avoid circular dependency at module level."""
         from deerflow.tools import get_available_tools
 
-        return get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled)
+        return get_available_tools(
+            model_name=model_name,
+            subagent_enabled=subagent_enabled,
+            mcp_servers=mcp_servers,
+        )
 
     @staticmethod
     def _serialize_tool_calls(tool_calls) -> list[dict]:

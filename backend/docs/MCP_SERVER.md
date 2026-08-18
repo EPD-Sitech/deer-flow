@@ -14,13 +14,31 @@ DeerFlow supports configurable MCP servers and skills to extend its capabilities
 3. Configure each server’s command, arguments, and environment variables as needed.
 4. Restart the application to load and register MCP tools.
 
+## Per-Agent Server Restrictions
+
+MCP routing hints are intentionally soft model guidance. To make an agent use
+only selected MCP servers, add an `mcp_servers` allowlist to that custom
+agent's `config.yaml`:
+
+```yaml
+mcp_servers:
+  - analytics
+```
+
+The values refer to keys under `mcpServers` in `extensions_config.json`.
+Omitting the field (or setting it to `null`) keeps all enabled servers
+available; `[]` disables all MCP tools; a non-empty list exposes only the
+listed servers. The same restriction is inherited by task sub-agents and is
+forwarded to ACP sessions. Listing a disabled or unknown server does not
+enable it.
+
 ## Routing Hints
 
 Use `routing` when an MCP server should be preferred for specific requests, such
 as internal database questions that should use a PostgreSQL MCP tool before web
 search. Routing hints are soft model guidance: they add a
 `<mcp_routing_hints>` prompt section, but they do not forbid other tools. Use
-agent-level allow/deny policy for hard restrictions. If `tool_search.enabled`
+the agent-level `mcp_servers` allowlist for hard restrictions. If `tool_search.enabled`
 defers MCP tool schemas, matching routing metadata can also auto-promote the
 deferred schema before the model call. Auto-promotion is controlled by the
 top-level `config.yaml -> tool_search.auto_promote_top_k` setting.

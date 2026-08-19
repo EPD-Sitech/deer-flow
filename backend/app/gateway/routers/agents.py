@@ -47,6 +47,7 @@ class AgentResponse(BaseModel):
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
+    category: str | None = Field(default=None, description="Agent gallery category")
     soul: str | None = Field(default=None, description="SOUL.md content")
 
 
@@ -68,6 +69,7 @@ class AgentCreateRequest(BaseModel):
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
+    category: str | None = Field(default=None, description="Agent gallery category")
     soul: str = Field(default="", description="SOUL.md content — agent personality and behavioral guardrails")
 
     @field_validator("mcp_servers")
@@ -87,6 +89,7 @@ class AgentUpdateRequest(BaseModel):
     model_settings: AgentModelSettings | None = Field(default=None, description="Updated per-agent sampling overrides")
     thinking_enabled: bool | None = Field(default=None, description="Updated per-agent thinking-mode default")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Updated per-agent reasoning-effort default")
+    category: str | None = Field(default=None, description="Updated Agent gallery category")
     soul: str | None = Field(default=None, description="Updated SOUL.md content")
 
     @field_validator("mcp_servers")
@@ -216,6 +219,7 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         model_settings=agent_cfg.model_settings,
         thinking_enabled=agent_cfg.thinking_enabled,
         reasoning_effort=agent_cfg.reasoning_effort,
+        category=agent_cfg.category,
         soul=soul,
     )
 
@@ -351,6 +355,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         config_data["mcp_servers"] = request.mcp_servers
     if request.skills is not None:
         config_data["skills"] = request.skills
+    if request.category is not None:
+        config_data["category"] = request.category
     # model / model_settings / thinking_enabled / reasoning_effort (issue #4336).
     _apply_model_behavior(config_data, request)
 
@@ -431,7 +437,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         # Use model_fields_set to distinguish "field omitted" from "explicitly set to null".
         # This is critical for skills where None means "inherit all" (not "don't change").
         fields_set = request.model_fields_set
-        config_changed = bool(fields_set & ({"description", "tool_groups", "mcp_servers", "skills"} | set(_MODEL_BEHAVIOR_FIELDS)))
+        config_changed = bool(fields_set & ({"description", "tool_groups", "mcp_servers", "skills", "category"} | set(_MODEL_BEHAVIOR_FIELDS)))
 
         updated: dict | None = None
         if config_changed:
@@ -455,6 +461,14 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
                 new_skills = agent_cfg.skills
             if new_skills is not None:
                 updated["skills"] = new_skills
+
+            new_category = (
+                request.category
+                if "category" in fields_set
+                else (agent_cfg.category if agent_cfg is not None else None)
+            )
+            if new_category is not None:
+                updated["category"] = new_category
 
             # model / model_settings / thinking_enabled / reasoning_effort:
             # take explicitly-set request fields, else preserve the existing

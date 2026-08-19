@@ -97,6 +97,31 @@ def _attachment_header(filename: str) -> str:
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
+class AgentSettingsWelcomeSuggestion(BaseModel):
+    label: str = Field(min_length=1, max_length=24)
+    prompt: str = Field(min_length=1, max_length=2000)
+    icon: Literal[
+        "sparkles",
+        "pen",
+        "microscope",
+        "shapes",
+        "graduation-cap",
+        "lightbulb",
+    ] = "lightbulb"
+
+
+class AgentSettingsUpdateRequest(AgentUpdateRequest):
+    scope: AgentScope | None = Field(
+        default=None,
+        description="Target Agent scope for management settings",
+    )
+    welcome_suggestions: list[AgentSettingsWelcomeSuggestion] | None = Field(
+        default=None,
+        max_length=6,
+        description="Agent-specific welcome shortcuts; [] hides them, null/missing uses defaults",
+    )
+
+
 class TestAgentRequest(BaseModel):
     test_prompt: str = Field(default="请介绍你自己", min_length=1)
     max_tokens: int = Field(default=500, ge=1, le=4096)
@@ -115,6 +140,7 @@ class AgentFilesUpdateRequest(BaseModel):
     config_yaml: str | None = None
     soul: str | None = None
     guide_questions: list[dict[str, str]] | None = None
+    welcome_suggestions: list[dict[str, str]] | None = None
 
 
 class AgentCloneRequest(BaseModel):
@@ -141,6 +167,7 @@ async def get_agent_files(name: str, scope: AgentScope = "user") -> dict[str, An
             "config_yaml": yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
             "soul": data.get("soul") or "",
             "guide_questions": data.get("ui", {}).get("guide_questions", []),
+            "welcome_suggestions": data.get("ui", {}).get("welcome_suggestions"),
         }
     except Exception as exc:
         raise _http_error(exc) from exc
@@ -342,12 +369,15 @@ async def update_agent_files(name: str, body: AgentFilesUpdateRequest, scope: Ag
             config_yaml=body.config_yaml,
             soul=body.soul,
             guide_questions=body.guide_questions,
+            welcome_suggestions=body.welcome_suggestions if "welcome_suggestions" in body.model_fields_set else None,
+            update_welcome_suggestions="welcome_suggestions" in body.model_fields_set,
         )
         config = {key: value for key, value in data.items() if key != "soul"}
         return {
             **data,
             "config_yaml": yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
             "guide_questions": data.get("ui", {}).get("guide_questions", []),
+            "welcome_suggestions": data.get("ui", {}).get("welcome_suggestions"),
             "scope": scope,
             "owner_id": get_effective_user_id(),
             "can_manage": True,
@@ -359,19 +389,94 @@ async def update_agent_files(name: str, body: AgentFilesUpdateRequest, scope: Ag
 @router.put("/agents/{name}/settings")
 async def update_agent_settings(
     name: str,
-    body: AgentUpdateRequest,
+    body: AgentSettingsUpdateRequest,
     scope: AgentScope = "user",
 ) -> AgentResponse:
     """Update structured agent settings in either the user or platform store."""
     _require_agents_api_enabled()
     if "model" in body.model_fields_set:
         _validate_model_exists(body.model)
+    target_scope: AgentScope = body.scope or scope
+    welcome_suggestions_set = "welcome_suggestions" in body.model_fields_set
+    welcome_suggestions = (
+        [item.model_dump() for item in body.welcome_suggestions]
+        if body.welcome_suggestions is not None
+        else None
+    )
+    updates = body.model_dump(exclude_unset=True)
+    updates.pop("scope", None)
+    updates.pop("welcome_suggestions", None)
     try:
-        data = await asyncio.to_thread(
-            _service(scope).update_settings,
-            name,
-            body.model_dump(exclude_unset=True),
-        )
+        if target_scope != scope:
+            if getattr(get_current_user(), "system_role", None) != "admin":
+                raise HTTPException(status_code=403, detail="Only administrators can change Agent scope")
+
+            source_service = _service(scope, require_platform_admin=False)
+            source_data = await asyncio.to_thread(source_service.describe, name)
+            paths = get_paths()
+            target_dir = (
+                paths.agent_dir(name)
+                if target_scope == "platform"
+                else paths.user_agent_dir(get_effective_user_id(), name)
+            )
+            if target_dir.exists():
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Agent '{name}' already exists in the target scope",
+                )
+
+            target_store = (
+                PlatformAgentStore(paths)
+                if target_scope == "platform"
+                else get_agent_store()
+            )
+            config = {
+                key: value
+                for key, value in source_data.items()
+                if key != "soul"
+            }
+            config.update(updates)
+            if welcome_suggestions_set:
+                ui = dict(config.get("ui") or {})
+                if welcome_suggestions is None:
+                    ui.pop("welcome_suggestions", None)
+                else:
+                    ui["welcome_suggestions"] = welcome_suggestions
+                if ui:
+                    config["ui"] = ui
+                else:
+                    config.pop("ui", None)
+            config["name"] = name
+            soul = source_data.get("soul") or ""
+            target_write = (
+                target_store.create
+                if target_scope == "platform"
+                else target_store.update
+            )
+            await asyncio.to_thread(
+                target_write,
+                name,
+                config,
+                soul,
+                user_id=get_effective_user_id(),
+            )
+            await asyncio.to_thread(
+                _service(scope, require_platform_admin=False).store.delete,
+                name,
+                user_id=get_effective_user_id(),
+            )
+            data = await asyncio.to_thread(
+                _service(target_scope, require_platform_admin=False).describe,
+                name,
+            )
+        else:
+            data = await asyncio.to_thread(
+                _service(scope).update_settings,
+                name,
+                updates,
+                welcome_suggestions=welcome_suggestions,
+                update_welcome_suggestions=welcome_suggestions_set,
+            )
         return _agent_response(data)
     except Exception as exc:
         raise _http_error(exc) from exc

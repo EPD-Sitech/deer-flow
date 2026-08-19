@@ -43,6 +43,7 @@ import type {
   SubAgentInfo,
   UpdateAgentRequest,
 } from "@/core/agents";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import { useMCPConfig } from "@/core/mcp/hooks";
 import { useModels } from "@/core/models/hooks";
@@ -66,6 +67,12 @@ import {
   type AgentVersion,
   type ValidationResult,
 } from "../agent-harness/agent-management-api";
+import {
+  ALL_LOCAL_AGENT_CATEGORY,
+  getLocalAgentCategoryIds,
+  LOCAL_AGENT_CATEGORIES,
+  type LocalAgentCategoryId,
+} from "../agent-harness/local-agent-categories";
 
 import {
   DEFAULT_MODEL_VALUE,
@@ -170,6 +177,7 @@ export function AgentSettingsDialog({
   scope = "user",
 }: AgentSettingsDialogProps) {
   const { t } = useI18n();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { models } = useModels();
   const { skills: skillsData, isLoading: skillsLoading } = useSkills();
@@ -177,6 +185,13 @@ export function AgentSettingsDialog({
   const [settingsSaving, setSettingsSaving] = useState(false);
 
   const [description, setDescription] = useState(agent.description ?? "");
+  const [targetScope, setTargetScope] = useState<AgentScope>(scope);
+  const [category, setCategory] = useState<LocalAgentCategoryId>(
+    () =>
+      (agent.category as LocalAgentCategoryId | undefined) ??
+      getLocalAgentCategoryIds(agent)[0] ??
+      "other",
+  );
   const [model, setModel] = useState(agent.model ?? DEFAULT_MODEL_VALUE);
   const [temperature, setTemperature] = useState(
     agent.model_settings?.temperature != null
@@ -213,6 +228,7 @@ export function AgentSettingsDialog({
   const [activityLoading, setActivityLoading] = useState(false);
   const [sectionOpen, setSectionOpen] = useState({
     identity: true,
+    category: true,
     model: true,
     skills: true,
     mcp: false,
@@ -389,6 +405,9 @@ export function AgentSettingsDialog({
           : null,
       skills: [...selectedSkills].sort(),
       mcp_servers: [...selectedMcpServers].sort(),
+      category:
+        category === ALL_LOCAL_AGENT_CATEGORY ? "other" : category,
+      scope: targetScope,
     };
 
     setSettingsSaving(true);
@@ -443,6 +462,94 @@ export function AgentSettingsDialog({
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
+              <div className="space-y-1">
+                <span className="text-foreground block text-xs font-medium">
+                  可见范围
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      ["user", "个人", "仅自己可见和使用"],
+                      ["platform", "公共", "所有用户可见和使用"],
+                    ] as const
+                  ).map(([value, label, hint]) => {
+                    const selected = targetScope === value;
+                    const disabled = user?.system_role !== "admin";
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setTargetScope(value)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "rounded-md border p-2.5 text-left transition-all",
+                          selected
+                            ? "border-primary/40 bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                            : "border-border bg-background text-muted-foreground",
+                          disabled
+                            ? "cursor-not-allowed opacity-60"
+                            : "cursor-pointer hover:border-primary/30 hover:bg-muted/50",
+                        )}
+                      >
+                        <span className="flex items-center justify-between gap-2 text-xs font-semibold">
+                          {label}
+                          {selected && <CheckIcon className="size-3.5 shrink-0" />}
+                        </span>
+                        <span className="text-muted-foreground mt-0.5 block text-[10px]">
+                          {hint}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {user?.system_role !== "admin" && (
+                  <p className="text-muted-foreground text-[11px]">
+                    仅管理员可以切换专家的公共/个人范围
+                  </p>
+                )}
+              </div>
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            icon={<WrenchIcon className="size-4" />}
+            title="专家分类"
+            description={
+              LOCAL_AGENT_CATEGORIES.find((item) => item.id === category)?.zhLabel ??
+              "其他"
+            }
+            open={sectionOpen.category}
+            onToggle={() =>
+              setSectionOpen((state) => ({
+                ...state,
+                category: !state.category,
+              }))
+            }
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {LOCAL_AGENT_CATEGORIES.filter(
+                (item) => item.id !== ALL_LOCAL_AGENT_CATEGORY,
+              ).map((item) => {
+                const selected = category === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setCategory(item.id)}
+                    className={cn(
+                      "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-xs font-medium transition-all",
+                      selected
+                        ? "border-primary/40 bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    <span>{item.zhLabel}</span>
+                    {selected && <CheckIcon className="size-3.5 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           </SettingsSection>
 

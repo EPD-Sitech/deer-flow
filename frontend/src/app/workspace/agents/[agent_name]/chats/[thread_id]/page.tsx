@@ -82,13 +82,15 @@ export default function AgentChatPage() {
       queryFn: listAgentCatalog,
       staleTime: 30_000,
     });
-  const guideQuestions = useMemo(
+  const catalogAgent = useMemo(
     () =>
       localAgentCatalog.find(
         (candidate) => candidate.runtime_name === agent_name,
-      )?.guide_questions ?? [],
+      ),
     [agent_name, localAgentCatalog],
   );
+  const guideQuestions = catalogAgent?.guide_questions ?? [];
+  const welcomeSuggestions = catalogAgent?.welcome_suggestions;
 
   const { threadId, setThreadId, isNewThread, setIsNewThread, isMock } =
     useThreadChat();
@@ -430,6 +432,7 @@ export default function AgentChatPage() {
                       draftAgentName={agent_name}
                       initialValue={initialPrompt}
                       defaultModelName={agent?.model}
+                      welcomeSuggestions={welcomeSuggestions}
                       autoFocus={isWelcomeMode}
                       status={
                         thread.error

@@ -12,6 +12,20 @@ export interface SubAgentInfo {
   prompt: string;
 }
 
+export type AgentWelcomeSuggestionIcon =
+  | "sparkles"
+  | "pen"
+  | "microscope"
+  | "shapes"
+  | "graduation-cap"
+  | "lightbulb";
+
+export interface AgentWelcomeSuggestion {
+  label: string;
+  prompt: string;
+  icon: AgentWelcomeSuggestionIcon;
+}
+
 export interface Agent {
   name: string;
   description: string;
@@ -22,6 +36,8 @@ export interface Agent {
   model_settings?: AgentModelSettings | null;
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;
+  category?: string | null;
+  welcome_suggestions?: AgentWelcomeSuggestion[] | null;
   soul?: string | null;
 }
 
@@ -35,6 +51,7 @@ export interface CreateAgentRequest {
   model_settings?: AgentModelSettings | null;
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;
+  category?: string | null;
   soul?: string;
 }
 
@@ -47,5 +64,8 @@ export interface UpdateAgentRequest {
   model_settings?: AgentModelSettings | null;
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;
+  category?: string | null;
+  scope?: "user" | "platform" | null;
+  welcome_suggestions?: AgentWelcomeSuggestion[] | null;
   soul?: string | null;
 }

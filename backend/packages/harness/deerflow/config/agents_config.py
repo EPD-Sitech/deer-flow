@@ -214,6 +214,9 @@ class AgentConfig(BaseModel):
     # Per-agent reasoning-effort default for models that support it. None = do
     # not override (a request-supplied reasoning_effort still wins over this).
     reasoning_effort: Literal["low", "medium", "high"] | None = None
+    # Optional explicit category used by the local Agent gallery. When absent,
+    # the frontend may fall back to keyword classification for legacy agents.
+    category: str | None = None
     # Optional binding to GitHub repositories so this agent can respond to
     # webhook events from the gateway dispatcher. None means "no GitHub
     # integration", which is the case for every existing agent.
@@ -251,6 +254,7 @@ MANAGED_AGENT_CONFIG_FIELDS: frozenset[str] = frozenset(
         "model_settings",
         "thinking_enabled",
         "reasoning_effort",
+        "category",
     }
 )
 

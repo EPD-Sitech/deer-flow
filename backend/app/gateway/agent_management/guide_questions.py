@@ -5,6 +5,60 @@ from typing import Any
 import yaml
 
 MAX_GUIDE_QUESTIONS = 6
+MAX_WELCOME_SUGGESTIONS = 6
+WELCOME_SUGGESTION_ICONS = {
+    "sparkles",
+    "pen",
+    "microscope",
+    "shapes",
+    "graduation-cap",
+    "lightbulb",
+}
+
+
+def validate_welcome_suggestions(document: dict[str, Any]) -> list[dict[str, str]] | None:
+    """Validate ``ui.welcome_suggestions`` while preserving missing-vs-empty."""
+    ui = document.get("ui")
+    if ui is None:
+        return None
+    if not isinstance(ui, dict):
+        raise ValueError("config.yaml 中 ui 必须是对象")
+    if "welcome_suggestions" not in ui or ui["welcome_suggestions"] is None:
+        return None
+    raw = ui["welcome_suggestions"]
+    if not isinstance(raw, list):
+        raise ValueError("ui.welcome_suggestions 必须是数组")
+    if len(raw) > MAX_WELCOME_SUGGESTIONS:
+        raise ValueError(f"欢迎快捷选项最多配置 {MAX_WELCOME_SUGGESTIONS} 条")
+
+    suggestions: list[dict[str, str]] = []
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"第 {index} 条欢迎快捷选项必须是对象")
+        label = item.get("label")
+        prompt = item.get("prompt")
+        icon = item.get("icon", "lightbulb")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"第 {index} 条欢迎快捷选项缺少显示名称")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError(f"第 {index} 条欢迎快捷选项缺少提示词")
+        if not isinstance(icon, str) or icon not in WELCOME_SUGGESTION_ICONS:
+            raise ValueError(f"第 {index} 条欢迎快捷选项图标无效")
+        suggestions.append(
+            {
+                "label": label.strip(),
+                "prompt": prompt.strip(),
+                "icon": icon,
+            }
+        )
+    return suggestions
+
+
+def welcome_suggestions_from_document(
+    document: dict[str, Any],
+) -> list[dict[str, str]] | None:
+    """Return validated public-safe welcome shortcut data."""
+    return validate_welcome_suggestions(document)
 
 
 def validate_guide_questions(document: dict[str, Any]) -> list[dict[str, str]]:

@@ -14,7 +14,11 @@ import yaml
 from deerflow.config.agents_config import AgentConfig
 from deerflow.persistence.agents import AgentExistsError
 
-from .guide_questions import read_raw_config, validate_guide_questions
+from .guide_questions import (
+    read_raw_config,
+    validate_guide_questions,
+    validate_welcome_suggestions,
+)
 from .names import MIGRATED_AGENT_NAME_PATTERN, normalize_migrated_agent_name
 
 _AGENT_NAME_RE = MIGRATED_AGENT_NAME_PATTERN
@@ -99,7 +103,8 @@ class AgentManagementService:
         )
         if "ui" in raw:
             validate_guide_questions(raw)
-            result["ui"] = {"guide_questions": raw.get("ui", {}).get("guide_questions", [])}
+            validate_welcome_suggestions(raw)
+            result["ui"] = dict(raw.get("ui") or {})
         result["soul"] = soul
         return result
 
@@ -112,7 +117,9 @@ class AgentManagementService:
             state_dir=self.state_dir,
         )
         if "ui" in raw:
-            document["ui"] = {"guide_questions": validate_guide_questions(raw)}
+            validate_guide_questions(raw)
+            validate_welcome_suggestions(raw)
+            document["ui"] = dict(raw.get("ui") or {})
         return document
 
     def update_files(
@@ -122,6 +129,8 @@ class AgentManagementService:
         config_yaml: str | None = None,
         soul: str | None = None,
         guide_questions: list[dict[str, str]] | None = None,
+        welcome_suggestions: list[dict[str, str]] | None = None,
+        update_welcome_suggestions: bool = False,
     ) -> dict[str, Any]:
         normalized, current, _ = self._get(name)
         config_document: dict[str, Any] | None = None
@@ -137,20 +146,21 @@ class AgentManagementService:
             validated = AgentConfig(**loaded)
             config_document = _config_document(validated, name=normalized)
             config_guide_questions = validate_guide_questions(loaded)
-            current_questions = validate_guide_questions(
-                read_raw_config(
-                    self.store,
-                    normalized,
-                    self.user_id,
-                    state_dir=self.state_dir,
-                )
+            validate_welcome_suggestions(loaded)
+            current_raw = read_raw_config(
+                self.store,
+                normalized,
+                self.user_id,
+                state_dir=self.state_dir,
             )
+            current_questions = validate_guide_questions(current_raw)
             if guide_questions is None and not self.can_edit_guide_questions and config_guide_questions != current_questions:
                 raise PermissionError("Only administrators can manage Agent guide questions")
             if "ui" in loaded:
-                config_document["ui"] = {"guide_questions": config_guide_questions}
-            elif current_questions:
-                config_document["ui"] = {"guide_questions": current_questions}
+                config_document["ui"] = dict(loaded.get("ui") or {})
+                config_document["ui"]["guide_questions"] = config_guide_questions
+            elif "ui" in current_raw:
+                config_document["ui"] = dict(current_raw.get("ui") or {})
         if guide_questions is not None:
             requested_questions = validate_guide_questions(
                 {"ui": {"guide_questions": guide_questions}},
@@ -166,17 +176,37 @@ class AgentManagementService:
             if not self.can_edit_guide_questions and requested_questions != current_questions:
                 raise PermissionError("Only administrators can manage Agent guide questions")
             config_document = config_document or self._document(normalized, current)
-            config_document["ui"] = {"guide_questions": requested_questions}
+            ui = dict(config_document.get("ui") or {})
+            ui["guide_questions"] = requested_questions
+            config_document["ui"] = ui
+        if update_welcome_suggestions:
+            config_document = config_document or self._document(normalized, current)
+            ui = dict(config_document.get("ui") or {})
+            if welcome_suggestions is None:
+                ui.pop("welcome_suggestions", None)
+            else:
+                normalized_suggestions = validate_welcome_suggestions(
+                    {"ui": {"welcome_suggestions": welcome_suggestions}}
+                )
+                ui["welcome_suggestions"] = normalized_suggestions or []
+            config_document["ui"] = ui
         if soul is not None and not soul.strip():
             raise ValueError("SOUL.md content cannot be empty")
         self.store.update(normalized, config_document, soul, user_id=self.user_id)
         return self.describe(normalized)
 
-    def update_settings(self, name: str, updates: dict[str, Any]) -> dict[str, Any]:
-        """Update the structured settings while preserving unmanaged config."""
+    def update_settings(
+        self,
+        name: str,
+        updates: dict[str, Any],
+        *,
+        welcome_suggestions: list[dict[str, str]] | None = None,
+        update_welcome_suggestions: bool = False,
+    ) -> dict[str, Any]:
+        """Update structured settings while preserving migration-owned UI data."""
         normalized, current, _ = self._get(name)
         document = self._document(normalized, current)
-        guide_questions = document.pop("ui", None)
+        ui = dict(document.pop("ui", None) or {})
 
         for key, value in updates.items():
             if value is None:
@@ -187,8 +217,16 @@ class AgentManagementService:
         document["name"] = normalized
         validated = AgentConfig(**document)
         config_document = _config_document(validated, name=normalized)
-        if guide_questions is not None:
-            config_document["ui"] = guide_questions
+        if update_welcome_suggestions:
+            if welcome_suggestions is None:
+                ui.pop("welcome_suggestions", None)
+            else:
+                normalized_suggestions = validate_welcome_suggestions(
+                    {"ui": {"welcome_suggestions": welcome_suggestions}}
+                )
+                ui["welcome_suggestions"] = normalized_suggestions or []
+        if ui:
+            config_document["ui"] = ui
         self.store.update(normalized, config_document, None, user_id=self.user_id)
         return self.describe(normalized)
 

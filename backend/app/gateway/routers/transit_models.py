@@ -68,6 +68,9 @@ def _transit_model_info(item: dict[str, Any]) -> TransitModelInfo:
         name=item["name"],
         display_name=item.get("display_name") or item["name"],
         description=None,
+        # "免费" models are surfaced first by the service layer; echo the flag so
+        # the UI can mark/select them without re-deriving the rule.
+        free=bool(item.get("free")),
     )
 
 

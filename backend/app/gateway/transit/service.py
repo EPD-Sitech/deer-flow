@@ -101,11 +101,19 @@ async def fetch_transit_models(yx_uuid: str) -> list[dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001 - surface as 503 so the router can degrade
         raise HTTPException(status_code=503, detail=f"获取模型列表失败：{exc}") from exc
 
+    # Free models (name/display_name contains "免费") are surfaced first so the
+    # default selection (models[0]) prefers a free one; order within each group
+    # stays stable (catalog order).
+    sorted_catalog = sorted(
+        catalog,
+        key=lambda m: (1 if ("免费" in (m.name or "") or "免费" in (m.display_name or "")) else 0),
+    )
     return [
         {
             "name": model.name,
             "display_name": model.display_name or model.name,
             "supported_endpoint_types": ["openai"],
+            "free": "免费" in (model.name or "") or "免费" in (model.display_name or model.name),
         }
-        for model in catalog
+        for model in sorted_catalog
     ]

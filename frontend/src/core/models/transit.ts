@@ -15,6 +15,8 @@ export interface TransitModelInfo {
   description?: string | null;
   supports_thinking?: boolean;
   supports_reasoning_effort?: boolean;
+  /** True when the model name/display shows "免费" — surfaced first by the backend. */
+  free?: boolean;
 }
 
 export interface TransitModelsResponse {

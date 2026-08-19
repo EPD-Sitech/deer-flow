@@ -10,11 +10,14 @@ import {
   LightbulbIcon,
   Loader2Icon,
   MicIcon,
+  MicroscopeIcon,
   PaperclipIcon,
+  PenLineIcon,
   PlusIcon,
   RefreshCwIcon,
   RocketIcon,
   SparklesIcon,
+  ShapesIcon,
   SquareIcon,
   TargetIcon,
   Undo2Icon,
@@ -70,6 +73,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import type { AgentWelcomeSuggestion } from "@/core/agents";
 import { fetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { getBackendBaseURL } from "@/core/config";
@@ -297,6 +301,7 @@ export function InputBox({
   draftThreadId = threadId,
   draftAgentName,
   defaultModelName,
+  welcomeSuggestions,
   initialValue,
   onContextChange,
   onFollowupsVisibilityChange,
@@ -332,6 +337,8 @@ export function InputBox({
    * (issue #4336). ``null`` / undefined = no agent default → use models[0].
    */
   defaultModelName?: string | null;
+  /** Agent welcome shortcuts: null/undefined=system defaults, []=hidden. */
+  welcomeSuggestions?: AgentWelcomeSuggestion[] | null;
   initialValue?: string;
   onContextChange?: (
     context: Omit<
@@ -2814,7 +2821,10 @@ export function InputBox({
         !selectedSlashSkill &&
         !showSkillSuggestions && (
           <div className="flex items-center justify-center pt-2">
-            <SuggestionList onSelectPlaceholder={onSelectPlaceholder} />
+            <SuggestionList
+              welcomeSuggestions={welcomeSuggestions}
+              onSelectPlaceholder={onSelectPlaceholder}
+            />
           </div>
         )}
 
@@ -2896,9 +2906,20 @@ function VoiceInputButton({
   );
 }
 
+const WELCOME_SUGGESTION_ICON_MAP = {
+  sparkles: SparklesIcon,
+  pen: PenLineIcon,
+  microscope: MicroscopeIcon,
+  shapes: ShapesIcon,
+  "graduation-cap": GraduationCapIcon,
+  lightbulb: LightbulbIcon,
+};
+
 function SuggestionList({
+  welcomeSuggestions,
   onSelectPlaceholder,
 }: {
+  welcomeSuggestions?: AgentWelcomeSuggestion[] | null;
   onSelectPlaceholder: (newText: string) => void;
 }) {
   const { t } = useI18n();
@@ -2911,6 +2932,23 @@ function SuggestionList({
     },
     [textInput, onSelectPlaceholder],
   );
+
+  if (Array.isArray(welcomeSuggestions)) {
+    if (welcomeSuggestions.length === 0) return null;
+    return (
+      <Suggestions className="min-h-16 w-full max-w-full justify-center px-4 sm:w-fit sm:px-0">
+        {welcomeSuggestions.map((suggestion) => (
+          <Suggestion
+            key={`${suggestion.label}-${suggestion.prompt}`}
+            icon={WELCOME_SUGGESTION_ICON_MAP[suggestion.icon]}
+            suggestion={suggestion.label}
+            onClick={() => handleSuggestionClick(suggestion.prompt)}
+          />
+        ))}
+      </Suggestions>
+    );
+  }
+
   return (
     <Suggestions className="min-h-16 w-full max-w-full justify-center px-4 sm:w-fit sm:px-0">
       <ConfettiButton

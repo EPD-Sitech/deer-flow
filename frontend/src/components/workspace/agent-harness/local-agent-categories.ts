@@ -128,6 +128,15 @@ function searchableAgentText(agent: Agent): string {
 }
 
 export function getLocalAgentCategoryIds(agent: Agent): ConcreteCategoryId[] {
+  const explicit = agent.category?.trim();
+  if (
+    explicit &&
+    explicit !== ALL_LOCAL_AGENT_CATEGORY &&
+    LOCAL_AGENT_CATEGORIES.some((category) => category.id === explicit)
+  ) {
+    return [explicit as ConcreteCategoryId];
+  }
+
   const text = searchableAgentText(agent);
 
   for (const category of LOCAL_AGENT_CATEGORIES) {

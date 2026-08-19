@@ -30,7 +30,10 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { Agent } from "@/core/agents";
+import type {
+  Agent,
+  AgentWelcomeSuggestion,
+} from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 
 import {
@@ -49,6 +52,7 @@ import {
   type AgentGuideQuestion,
 } from "./guide-questions";
 import { LocalAgentSchedulePanel } from "./local-agent-schedule-panel";
+import { WelcomeSuggestionsEditor } from "./welcome-suggestions-editor";
 
 interface LocalAgentDetailDialogProps {
   agent: Agent;
@@ -90,6 +94,9 @@ export function LocalAgentDetailDialog({
     Array<AgentGuideQuestion & { id: string }>
   >([]);
   const [guideConfigError, setGuideConfigError] = useState<string | null>(null);
+  const [welcomeSuggestions, setWelcomeSuggestions] = useState<
+    AgentWelcomeSuggestion[] | null | undefined
+  >(undefined);
 
   const [memoryJson, setMemoryJson] = useState("");
   const [memoryLoading, setMemoryLoading] = useState(false);
@@ -113,6 +120,7 @@ export function LocalAgentDetailDialog({
         })),
       );
       setGuideConfigError(null);
+      setWelcomeSuggestions(result.welcome_suggestions);
       setSoul(result.soul);
       setFilesDirty(false);
     } catch (error) {
@@ -161,11 +169,15 @@ export function LocalAgentDetailDialog({
           guide_questions: canEditGuideQuestions
             ? guideQuestions.map(({ id: _id, ...question }) => question)
             : undefined,
+          welcome_suggestions: canEditGuideQuestions
+            ? welcomeSuggestions
+            : undefined,
         },
         scope,
       );
       setFiles(result);
       setConfigYaml(result.config_yaml);
+      setWelcomeSuggestions(result.welcome_suggestions);
       setSoul(result.soul);
       setFilesDirty(false);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -525,6 +537,18 @@ export function LocalAgentDetailDialog({
                     ))}
                   </div>
                 )}
+
+                <div className="border-border bg-muted/20 rounded-lg border p-4">
+                  <WelcomeSuggestionsEditor
+                    key={`${agent.name}:${open}:${files?.name ?? "loading"}`}
+                    value={welcomeSuggestions}
+                    readOnly={readOnly || !canEditGuideQuestions}
+                    onChange={(next) => {
+                      setWelcomeSuggestions(next);
+                      if (canEditGuideQuestions && !readOnly) setFilesDirty(true);
+                    }}
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent value="memory" className="m-0 space-y-4">

@@ -13,7 +13,11 @@ from deerflow.persistence.agents import get_agent_store, parse_agent_config
 from deerflow.persistence.agents.file import FileAgentStore
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id
 
-from .guide_questions import guide_questions_from_document, read_raw_config
+from .guide_questions import (
+    guide_questions_from_document,
+    read_raw_config,
+    welcome_suggestions_from_document,
+)
 from .platform_store import PlatformAgentStore
 
 logger = logging.getLogger(__name__)
@@ -38,15 +42,16 @@ class AgentCatalogService:
     ) -> dict[str, Any]:
         owns_agent = scope == "user"
         guide_questions: list[dict[str, str]] = []
+        welcome_suggestions: list[dict[str, str]] | None = None
         try:
-            guide_questions = guide_questions_from_document(
-                read_raw_config(
-                    source_store or self.store,
-                    config.name,
-                    self.user_id,
-                    state_dir=self.paths.user_dir(self.user_id),
-                )
+            raw_config = read_raw_config(
+                source_store or self.store,
+                config.name,
+                self.user_id,
+                state_dir=self.paths.user_dir(self.user_id),
             )
+            guide_questions = guide_questions_from_document(raw_config)
+            welcome_suggestions = welcome_suggestions_from_document(raw_config)
         except (FileNotFoundError, ValueError):
             logger.warning("Failed to load guide questions for Agent '%s'", config.name, exc_info=True)
         return {
@@ -64,6 +69,7 @@ class AgentCatalogService:
             "can_share": self.can_manage_public,
             "can_batch": can_manage,
             "guide_questions": guide_questions,
+            "welcome_suggestions": welcome_suggestions,
         }
 
     def _public_agents(self) -> list:

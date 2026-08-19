@@ -1,4 +1,8 @@
-import type { Agent, UpdateAgentRequest } from "@/core/agents";
+import type {
+  Agent,
+  AgentWelcomeSuggestion,
+  UpdateAgentRequest,
+} from "@/core/agents";
 import { fetch as authenticatedFetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
@@ -7,6 +11,7 @@ export interface AgentFiles {
   config_yaml: string;
   soul: string;
   guide_questions?: Array<{ question: string; prompt?: string }>;
+  welcome_suggestions?: AgentWelcomeSuggestion[] | null;
 }
 
 export interface AgentVersion {
@@ -159,6 +164,7 @@ export function updateAgentFiles(
     config_yaml: string;
     soul: string;
     guide_questions?: Array<{ question: string; prompt?: string }>;
+    welcome_suggestions?: AgentWelcomeSuggestion[] | null;
   },
   scope: AgentScope = "user",
 ) {

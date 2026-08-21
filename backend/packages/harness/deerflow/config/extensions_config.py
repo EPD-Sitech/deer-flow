@@ -1,5 +1,6 @@
 """Unified extensions configuration for MCP servers and skills."""
 
+import errno
 import json
 import logging
 import os
@@ -449,7 +450,22 @@ def atomic_write_extensions_config(path: Path, data: dict[str, Any]) -> None:
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
 
-        os.replace(temporary_path, target_path)
+        try:
+            os.replace(temporary_path, target_path)
+        except OSError as error:
+            if error.errno != errno.EBUSY:
+                raise
+            # Docker single-file bind mounts are mount points, so rename(2)
+            # over the target fails with EBUSY even when the file is writable.
+            # The temp file above is complete and fsynced; use it as the source
+            # for the narrow in-place fallback only in this mount-point case.
+            with temporary_path.open("rb") as source, target_path.open("r+b") as target:
+                target.seek(0)
+                target.truncate(0)
+                while chunk := source.read(1024 * 1024):
+                    target.write(chunk)
+                target.flush()
+                os.fsync(target.fileno())
         _fsync_directory_best_effort(target_path.parent)
     finally:
         if temporary_path is not None:

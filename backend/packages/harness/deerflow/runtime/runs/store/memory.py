@@ -176,6 +176,12 @@ class MemoryRunStore(RunStore):
             return False
         run["status"] = status
         for key, value in kwargs.items():
+            if key == "operations_usage" and value is not None:
+                run["metadata"] = {
+                    **(run.get("metadata") or {}),
+                    "operations_usage": value,
+                }
+                continue
             if value is not None:
                 run[key] = value
         run["updated_at"] = datetime.now(UTC).isoformat()
@@ -184,6 +190,12 @@ class MemoryRunStore(RunStore):
     async def update_run_progress(self, run_id, **kwargs):
         if run_id in self._runs and self._runs[run_id].get("status") == "running":
             for key, value in kwargs.items():
+                if key == "operations_usage" and value is not None:
+                    self._runs[run_id]["metadata"] = {
+                        **(self._runs[run_id].get("metadata") or {}),
+                        "operations_usage": value,
+                    }
+                    continue
                 if value is not None:
                     self._runs[run_id][key] = value
             self._runs[run_id]["updated_at"] = datetime.now(UTC).isoformat()

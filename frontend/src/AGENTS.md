@@ -1,5 +1,17 @@
 ### Data Flow
 
+Admin operations reporting lives outside the chat stream. The
+`/workspace/operations` page reads `GET /api/operations/dashboard` and
+`GET /api/operations/dashboard/details` concurrently through `core/operations`.
+The base response drives the first render; the slower filesystem and skill/MCP
+details retain a local skeleton and failure boundary. Both queries are keyed by
+the selected range and browser timezone so deferred inventory comparisons use
+the same period boundary as the base charts. Trend charts expose exact
+per-series values through pointer tooltips, while inventory KPI comparisons
+come from the details response and remain unavailable until a historical
+snapshot exists. The page should stay a read-only dashboard surface and must
+not derive product metrics from live chat component state.
+
 1. Optional composer helpers such as `core/input-polish` can rewrite the local draft before submission, and `core/voice-input` can transcribe browser microphone input into that same local draft; confirmed user input then flows to thread hooks (`core/threads/hooks.ts`) → LangGraph SDK streaming
 2. Stream events update thread state (messages, artifacts, todos, goal). The main thread stream uses the LangGraph SDK's `throttle: true` mode so updates received in the same macrotask coalesce before React is notified; do not replace it with a numeric delay without validating the SDK's trailing-debounce behavior on a continuous stream.
    File-tool artifact auto-open work must run in an effect with timer cleanup; never schedule timers while rendering streamed `write_file` or `str_replace` updates.

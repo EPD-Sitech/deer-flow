@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from deerflow.runtime.events.store.memory import MemoryRunEventStore
 from deerflow.runtime.journal import RunJournal
@@ -581,6 +581,121 @@ class TestConvenienceFields:
         data = j.get_completion_data()
         assert data["total_tokens"] == 100
         assert data["message_count"] == 5
+
+    @pytest.mark.anyio
+    async def test_completion_data_includes_durable_tool_and_skill_usage(self, journal_setup):
+        j, _ = journal_setup
+        j.on_llm_end(
+            _make_llm_response(
+                "",
+                tool_calls=[
+                    {"id": "call_read", "name": "read_file", "args": {}},
+                    {"id": "call_search", "name": "web_search", "args": {}},
+                ],
+            ),
+            run_id=uuid4(),
+            parent_run_id=None,
+            tags=["lead_agent"],
+        )
+        skill_result = ToolMessage(
+            content="skill loaded",
+            tool_call_id="call_read",
+            name="read_file",
+            additional_kwargs={
+                "skill_context_entry": {
+                    "path": "/mnt/skills/public/wechat-operations/SKILL.md",
+                }
+            },
+        )
+        j.on_tool_end(skill_result, run_id=uuid4())
+        j.on_tool_end(
+            ToolMessage(content="results", tool_call_id="call_search"),
+            run_id=uuid4(),
+        )
+        # A duplicate callback for the same tool result must not inflate the
+        # durable analytics snapshot.
+        j.on_tool_end(skill_result, run_id=uuid4())
+        j.record_middleware(
+            "skill_activation",
+            name="SkillActivationMiddleware",
+            hook="wrap_model_call",
+            action="activate",
+            changes={"skill_name": "slides"},
+        )
+
+        assert j.get_completion_data()["operations_usage"] == {
+            "version": 1,
+            "tools": {"read_file": 1, "web_search": 1},
+            "skills": {"wechat-operations": 1, "slides": 1},
+        }
+
+    @pytest.mark.anyio
+    async def test_operations_usage_excludes_subagent_tool_results(self, journal_setup):
+        j, _ = journal_setup
+        j.on_llm_end(
+            _make_llm_response(
+                "",
+                tool_calls=[{"id": "lead_call", "name": "web_search", "args": {}}],
+            ),
+            run_id=uuid4(),
+            parent_run_id=None,
+            tags=["lead_agent"],
+        )
+
+        j.on_tool_end(
+            ToolMessage(content="lead result", tool_call_id="lead_call", name="web_search"),
+            run_id=uuid4(),
+            tags=["lead_agent"],
+        )
+        j.on_tool_end(
+            ToolMessage(content="subagent result", tool_call_id="sub_call", name="web_search"),
+            run_id=uuid4(),
+            tags=["subagent:research"],
+        )
+
+        assert j.get_completion_data()["operations_usage"]["tools"] == {"web_search": 1}
+
+    @pytest.mark.anyio
+    async def test_skill_usage_is_idempotent_within_one_run(self, journal_setup):
+        j, _ = journal_setup
+        j.record_middleware(
+            "skill_activation",
+            name="SkillActivationMiddleware",
+            hook="wrap_model_call",
+            action="activate",
+            changes={"skill_name": "slides"},
+        )
+        j.record_middleware(
+            "skill_activation",
+            name="SkillActivationMiddleware",
+            hook="wrap_model_call",
+            action="activate",
+            changes={"skill_name": "slides"},
+        )
+
+        j.on_llm_end(
+            _make_llm_response(
+                "",
+                tool_calls=[{"id": "skill_call", "name": "read_file", "args": {}}],
+            ),
+            run_id=uuid4(),
+            parent_run_id=None,
+            tags=["lead_agent"],
+        )
+        j.on_tool_end(
+            ToolMessage(
+                content="skill loaded",
+                tool_call_id="skill_call",
+                name="read_file",
+                additional_kwargs={
+                    "skill_context_entry": {"path": "/mnt/skills/public/slides/SKILL.md"}
+                },
+            ),
+            run_id=uuid4(),
+            tags=["lead_agent"],
+        )
+
+        assert j.get_completion_data()["operations_usage"]["skills"] == {"slides": 1}
 
 
 class TestMiddlewareEvents:

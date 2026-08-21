@@ -48,7 +48,7 @@ from deerflow.persistence.migrations._helpers import _normalize_default
 asyncio_test = pytest.mark.asyncio
 
 
-HEAD = "0013_merge_mcp_transit"
+HEAD = "0015_inventory_snapshots"
 BASELINE = "0001_baseline"
 
 
@@ -139,6 +139,8 @@ async def test_empty_branch_creates_all_and_stamps_head(tmp_path: Path) -> None:
             "feedback",
             "users",
             "run_events",
+            "operation_events",
+            "operation_inventory_snapshots",
             "channel_connections",
             "channel_credentials",
             "channel_conversations",

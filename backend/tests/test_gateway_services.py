@@ -32,6 +32,7 @@ def _make_start_run_request(run_manager, *, thread_store=None, auth_source=None)
     store = InMemoryStore()
     return SimpleNamespace(
         headers={},
+        cookies={},
         state=SimpleNamespace(auth_source=auth_source),
         app=SimpleNamespace(
             state=SimpleNamespace(
@@ -1641,6 +1642,7 @@ async def _capture_start_run_graph_input(body, *, auth_source=None):
     )
     request = SimpleNamespace(
         headers={},
+        cookies={},
         state=SimpleNamespace(auth_source=auth_source),
         app=SimpleNamespace(state=state),
     )
@@ -1684,6 +1686,7 @@ def _make_start_run_persistence_context():
     )
     request = SimpleNamespace(
         headers={},
+        cookies={},
         state=SimpleNamespace(),
         app=SimpleNamespace(state=state),
     )
@@ -1804,6 +1807,49 @@ def test_start_run_preserves_ordinary_metadata(_stub_app_config):
         assert record.metadata == metadata
         assert (await thread_store.get(thread_id))["metadata"] == metadata
         assert captured["config"]["metadata"] == metadata
+
+    asyncio.run(_scenario())
+
+
+def test_start_run_persists_resolved_agent_name_for_analytics(_stub_app_config):
+    import asyncio
+    from unittest.mock import patch
+
+    from app.gateway.routers.thread_runs import RunCreateRequest
+    from app.gateway.services import start_run
+
+    async def _scenario():
+        thread_id = "thread-wechat-operations"
+        request, run_store, thread_store = _make_start_run_persistence_context()
+
+        async def fake_run_agent(*args, **kwargs):
+            return None
+
+        with (
+            patch(
+                "app.gateway.services.resolve_agent_factory",
+                return_value=object(),
+            ),
+            patch(
+                "app.gateway.services.run_agent",
+                side_effect=fake_run_agent,
+            ),
+        ):
+            record = await start_run(
+                RunCreateRequest(
+                    assistant_id="lead_agent",
+                    input={"messages": [{"role": "user", "content": "hi"}]},
+                    context={"agent_name": "公众号运营智能体"},
+                ),
+                thread_id,
+                request,
+            )
+            await record.task
+
+        persisted = await run_store.get(record.run_id)
+        assert record.metadata["agent_name"] == "公众号运营智能体"
+        assert persisted["metadata"]["agent_name"] == "公众号运营智能体"
+        assert (await thread_store.get(thread_id))["metadata"]["agent_name"] == "公众号运营智能体"
 
     asyncio.run(_scenario())
 
@@ -1935,6 +1981,7 @@ def test_start_run_uses_internal_owner_header_for_persistence(_stub_app_config):
         )
         request = SimpleNamespace(
             headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "owner-1"},
+            cookies={},
             state=SimpleNamespace(
                 auth_source=AUTH_SOURCE_INTERNAL,
                 user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE),
@@ -2024,6 +2071,7 @@ def test_start_run_stamps_internal_owner_guardrail_attribution(_stub_app_config)
         )
         request = SimpleNamespace(
             headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "owner-1"},
+            cookies={},
             state=SimpleNamespace(
                 auth_source=AUTH_SOURCE_INTERNAL,
                 user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE),
@@ -2106,6 +2154,7 @@ def test_start_run_session_caller_anti_forgery(_stub_app_config):
         )
         request = SimpleNamespace(
             headers={},
+            cookies={},
             state=SimpleNamespace(
                 auth_source="session",
                 user=SimpleNamespace(id="u1", system_role="user"),

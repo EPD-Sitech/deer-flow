@@ -1,6 +1,12 @@
 "use client";
 
-import { BotIcon, CalendarClock, MessagesSquare, PuzzleIcon } from "lucide-react";
+import {
+  BarChart3Icon,
+  BotIcon,
+  CalendarClock,
+  MessagesSquare,
+  PuzzleIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,12 +22,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
+  const { user } = useAuth();
+  const isAdmin = user?.system_role === "admin";
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
@@ -100,6 +109,22 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
+        {isAdmin && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname.startsWith("/workspace/operations")}
+              asChild
+            >
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/operations"
+              >
+                <BarChart3Icon />
+                <span>运营看板</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
       </SidebarMenu>
     </SidebarGroup>
   );

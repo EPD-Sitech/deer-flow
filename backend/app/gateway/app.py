@@ -32,6 +32,7 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
+    operations,
     runs,
     scheduled_tasks,
     skills,
@@ -693,6 +694,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     # Include routers
     # Models API is mounted at /api/models
     app.include_router(models.router)
+
+    # Operations dashboard API is mounted at /api/operations
+    app.include_router(operations.router)
 
     # Features API is mounted at /api/features
     app.include_router(features.router)

@@ -36,6 +36,7 @@ from app.gateway.auth.session_cookie_state import SKIP_AUTH_CSRF_COOKIE_STATE_AT
 from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
 from app.gateway.deps import get_current_user_from_request, get_local_provider
+from app.gateway.operation_events import record_operation_event
 from app.gateway.transit.service import (
     get_cached_api_key,
     get_transit_default_model,
@@ -313,6 +314,7 @@ async def login_local(
     _record_login_success(client_ip)
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=remember_me)
+    await record_operation_event("login", user_id=str(user.id), source="local")
 
     return LoginResponse(
         expires_in=get_auth_config().token_expiry_days * 24 * 3600,
@@ -370,6 +372,8 @@ async def register(request: Request, response: Response, body: RegisterRequest):
 
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
+    await record_operation_event("register", user_id=str(user.id), source="local")
+    await record_operation_event("login", user_id=str(user.id), source="local")
 
     return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider)
 
@@ -583,6 +587,8 @@ async def initialize_admin(request: Request, response: Response, body: Initializ
 
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
+    await record_operation_event("register", user_id=str(user.id), source="setup")
+    await record_operation_event("login", user_id=str(user.id), source="setup")
 
     return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider)
 
@@ -870,6 +876,7 @@ async def oauth_callback(
 
     # Delete state cookie
     delete_state_cookie(redirect_response, request, provider)
+    await record_operation_event("login", user_id=str(user.id), source=f"oidc:{provider}"[:32])
 
     return redirect_response
 

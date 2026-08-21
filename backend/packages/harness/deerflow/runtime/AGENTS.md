@@ -1,3 +1,15 @@
+### Run Journal Operations Usage
+
+`RunJournal` keeps per-run counters for lead-agent tool results and skill
+activations. Tool results are deduplicated by tool-call/message identity, and
+skill usage includes both explicit slash activation events and successful
+skill-file reads carrying `skill_context_entry`. The completion snapshot writes
+the versioned counters to `runs.metadata_json.operations_usage`; progress
+snapshots carry the same shape so a run that is interrupted after using a tool
+still retains its latest durable counts. Operations reporting reads this run
+metadata first and consults `run_events` only for rows created before the
+snapshot existed.
+
 ### Checkpoint Channel Modes (`full` / `delta`)
 
 Checkpointer storage runs in one of two channel modes, selected by `checkpoint_channel_mode` in `config.yaml` (default `full`). `delta` mode adopts LangGraph 1.2's `DeltaChannel` for `messages`: checkpoints store a sentinel + per-step writes instead of the full message list, so storage/serde grows O(N) instead of O(N²) in turns. All checkpointer backends (memory/sqlite/postgres) serve both modes unchanged — the semantics live in the compiled graph's channel table, not in the saver.

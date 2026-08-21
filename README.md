@@ -73,6 +73,7 @@ DeerFlow has newly integrated the intelligent search and crawling toolset indepe
       - [Claude Code Integration](#claude-code-integration)
     - [Session Goals](#session-goals)
     - [Manual Context Compaction](#manual-context-compaction)
+    - [Operations Dashboard](#operations-dashboard)
     - [Sub-Agents](#sub-agents)
     - [Sandbox \& File System](#sandbox--file-system)
     - [Context Engineering](#context-engineering)
@@ -1116,6 +1117,16 @@ The Web UI shows the active goal above the composer. The same command is availab
 Use `/compact` in the Web UI composer to summarize older context for the current thread. DeerFlow keeps the full chat visible, but future model calls use the compacted summary plus recent messages. The command is ignored when there is not enough history to compact, and it is blocked while the thread has a run in flight, including when that run is owned by another Gateway worker. If a multi-worker reservation loses its lease, DeerFlow cancels the checkpoint writer before the replacing run proceeds and returns a retryable conflict after cleanup. Thread-title edits are serialized through the same state-write boundary and show a conflict without closing the rename dialog when a run is active.
 
 The chat header also shows a context-window gauge when the selected model has a positive `context_window` configured. It estimates the latest materialized checkpoint's message tokens and keeps the previous same-thread percentage visible while data refetches, independently of the cumulative token-usage setting.
+
+### Operations Dashboard
+
+Administrators can open `/workspace/operations` to inspect platform KPIs,
+period trends, expert run rankings, model/token usage, and exact tool and skill
+usage. Database-backed metrics render first; slower artifact, skill, and MCP
+inventory scans load independently with skeleton states. Inventory totals use
+durable snapshots for period-over-period comparisons, so the first observation
+shows no comparison instead of inventing historical data. Chart pointer
+tooltips expose the exact value for every displayed series.
 
 ### Sub-Agents
 

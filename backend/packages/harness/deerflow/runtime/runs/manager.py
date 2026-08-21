@@ -481,6 +481,12 @@ class RunManager:
                 for key, value in kwargs.items():
                     if key == "status":
                         continue
+                    if key == "operations_usage" and value is not None:
+                        record.metadata = {
+                            **record.metadata,
+                            "operations_usage": value,
+                        }
+                        continue
                     if hasattr(record, key) and value is not None:
                         setattr(record, key, value)
                 record.updated_at = _now_iso()
@@ -534,6 +540,12 @@ class RunManager:
                 should_persist = record.status == RunStatus.running and not record.ownership_lost
             if record is not None and should_persist:
                 for key, value in kwargs.items():
+                    if key == "operations_usage" and value is not None:
+                        record.metadata = {
+                            **record.metadata,
+                            "operations_usage": value,
+                        }
+                        continue
                     if hasattr(record, key) and value is not None:
                         setattr(record, key, value)
                 record.updated_at = _now_iso()

@@ -337,6 +337,7 @@ class RunRepository(RunStore):
         message_count: int = 0,
         last_ai_message: str | None = None,
         first_human_message: str | None = None,
+        operations_usage: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> bool:
         """Update status + token usage + convenience fields on run completion.
@@ -377,6 +378,11 @@ class RunRepository(RunStore):
                 )
                 .values(**values)
             )
+            if result.rowcount != 0 and operations_usage is not None:
+                metadata_json = await session.scalar(select(RunRow.metadata_json).where(RunRow.run_id == run_id))
+                merged_metadata = dict(metadata_json or {})
+                merged_metadata["operations_usage"] = self._safe_json(operations_usage) or {}
+                await session.execute(update(RunRow).where(RunRow.run_id == run_id).values(metadata_json=merged_metadata))
             await session.commit()
             return result.rowcount != 0
 
@@ -395,6 +401,7 @@ class RunRepository(RunStore):
         message_count: int | None = None,
         last_ai_message: str | None = None,
         first_human_message: str | None = None,
+        operations_usage: dict[str, Any] | None = None,
     ) -> None:
         """Update token usage + convenience fields while a run is still active."""
         values: dict[str, Any] = {"updated_at": datetime.now(UTC)}
@@ -418,7 +425,12 @@ class RunRepository(RunStore):
         if first_human_message is not None:
             values["first_human_message"] = first_human_message[:2000]
         async with self._sf() as session:
-            await session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").values(**values))
+            result = await session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").values(**values))
+            if result.rowcount != 0 and operations_usage is not None:
+                metadata_json = await session.scalar(select(RunRow.metadata_json).where(RunRow.run_id == run_id))
+                merged_metadata = dict(metadata_json or {})
+                merged_metadata["operations_usage"] = self._safe_json(operations_usage) or {}
+                await session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").values(metadata_json=merged_metadata))
             await session.commit()
 
     async def aggregate_tokens_by_thread(self, thread_id: str, *, include_active: bool = False) -> dict[str, Any]:

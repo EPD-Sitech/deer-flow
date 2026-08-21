@@ -28,7 +28,7 @@ from deerflow.persistence.bootstrap import bootstrap_schema
 pytestmark = pytest.mark.asyncio
 
 
-HEAD = "0013_merge_mcp_transit"
+HEAD = "0015_inventory_snapshots"
 
 
 def _url(tmp_path: Path) -> str:

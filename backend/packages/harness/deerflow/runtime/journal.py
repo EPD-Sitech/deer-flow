@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -37,6 +38,7 @@ from deerflow.runtime.events.catalog import (
     LLM_TOOL_RESULT_EVENT,
     MEMORY_CONTEXT_EVENT,
     MIDDLEWARE_EVENT_PATTERN,
+    MIDDLEWARE_SKILL_ACTIVATION_TAG,
     RUN_END_EVENT,
     RUN_ERROR_EVENT,
     RUN_START_EVENT,
@@ -283,6 +285,14 @@ class RunJournal(BaseCallbackHandler):
         self._seen_llm_starts: set[str] = set()  # langchain run_ids that fired on_chat_model_start
         self._current_run_tool_call_names: dict[str, str] = {}
         self._persisted_tool_message_identities: set[str] = set()
+        self._counted_tool_message_identities: set[str] = set()
+
+        # Durable per-run operations analytics. These counters are copied into
+        # runs.metadata_json so dashboards do not depend on the configured
+        # RunEventStore being database-backed.
+        self._tool_usage: Counter[str] = Counter()
+        self._skill_usage: Counter[str] = Counter()
+        self._counted_skill_usage_names: set[str] = set()
 
         # Artifact-production tracking for the terminal run.delivery event
         # (#4272 slice 1). Deduped by (path, tool_name); insertion order kept.
@@ -527,12 +537,12 @@ class RunJournal(BaseCallbackHandler):
         tool_call_id = str(run_id)
         logger.debug("Tool start for node %s, tool_call_id=%s, tags=%s", run_id, tool_call_id, tags)
 
-    def on_tool_end(self, output, *, run_id, parent_run_id=None, **kwargs):
+    def on_tool_end(self, output, *, run_id, parent_run_id=None, tags=None, **kwargs):
         """Handle tool end event, append message and clear node data"""
         try:
             if isinstance(output, ToolMessage):
                 msg = cast(ToolMessage, output)
-                self._persist_tool_result_message(msg)
+                self._persist_tool_result_message(msg, caller=self._identify_caller(tags))
             elif isinstance(output, Command):
                 cmd = cast(Command, output)
                 messages = cmd.update.get("messages", [])
@@ -544,7 +554,7 @@ class RunJournal(BaseCallbackHandler):
                 artifact_tool_names: set[str] = set()
                 for message in messages:
                     if isinstance(message, BaseMessage):
-                        self._persist_tool_result_message(message)
+                        self._persist_tool_result_message(message, caller=self._identify_caller(tags))
                         if artifacts and isinstance(message, ToolMessage):
                             tool_call_id = getattr(message, "tool_call_id", None)
                             if isinstance(tool_call_id, str):
@@ -595,16 +605,59 @@ class RunJournal(BaseCallbackHandler):
             name = self._tool_call_value(tool_call, "name")
             self._current_run_tool_call_names[tool_call_id] = str(name or "")
 
-    def _persist_tool_result_message(self, message: BaseMessage) -> None:
+    def _persist_tool_result_message(self, message: BaseMessage, *, caller: str = "lead_agent") -> None:
+        identity = self._message_identity(message)
+        should_count = identity is None or identity not in self._counted_tool_message_identities
+        tool_call_id = getattr(message, "tool_call_id", None)
+        is_lead_tool_call = (
+            caller == "lead_agent"
+            and isinstance(tool_call_id, str)
+            and tool_call_id in self._current_run_tool_call_names
+        )
+        if isinstance(message, ToolMessage) and should_count and is_lead_tool_call:
+            tool_name = getattr(message, "name", None)
+            if not isinstance(tool_name, str) or not tool_name.strip():
+                tool_name = self._current_run_tool_call_names.get(tool_call_id, "") if isinstance(tool_call_id, str) else ""
+            if isinstance(tool_name, str) and tool_name.strip():
+                self._tool_usage[tool_name.strip()] += 1
+
+            skill_name = self._skill_name_from_tool_message(message)
+            if skill_name and skill_name not in self._counted_skill_usage_names:
+                self._skill_usage[skill_name] += 1
+                self._counted_skill_usage_names.add(skill_name)
+
+            if identity:
+                self._counted_tool_message_identities.add(identity)
+            self._schedule_progress_flush()
+
         self._put(
             event_type=LLM_TOOL_RESULT_EVENT.event_type,
             category=LLM_TOOL_RESULT_EVENT.category,
             content=message.model_dump(),
         )
-        identity = self._message_identity(message)
         if identity:
             self._persisted_tool_message_identities.add(identity)
         self._record_message_summary(message)
+
+    @staticmethod
+    def _skill_name_from_tool_message(message: ToolMessage) -> str | None:
+        additional_kwargs = getattr(message, "additional_kwargs", None)
+        if not isinstance(additional_kwargs, Mapping):
+            return None
+        entry = additional_kwargs.get("skill_context_entry")
+        if not isinstance(entry, Mapping):
+            return None
+        for key in ("name", "skill_name"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        path = entry.get("path")
+        if not isinstance(path, str) or not path.strip():
+            return None
+        parts = [part for part in path.replace("\\", "/").rstrip("/").split("/") if part]
+        if len(parts) >= 2 and parts[-1].lower() == "skill.md":
+            return parts[-2]
+        return None
 
     def _final_output_messages(self, outputs: Any) -> list[Any]:
         if isinstance(outputs, Mapping):
@@ -828,6 +881,13 @@ class RunJournal(BaseCallbackHandler):
             category=MIDDLEWARE_EVENT_PATTERN.category,
             content={"name": name, "hook": hook, "action": action, "changes": changes},
         )
+        if tag == MIDDLEWARE_SKILL_ACTIVATION_TAG:
+            skill_name = changes.get("skill_name") if isinstance(changes, Mapping) else None
+            normalized_skill_name = skill_name.strip() if isinstance(skill_name, str) else ""
+            if normalized_skill_name and normalized_skill_name not in self._counted_skill_usage_names:
+                self._skill_usage[normalized_skill_name] += 1
+                self._counted_skill_usage_names.add(normalized_skill_name)
+                self._schedule_progress_flush()
 
     def record_memory_context(self, *, content_sha256: str) -> None:
         """Record the effective hidden memory block for this run.
@@ -971,6 +1031,11 @@ class RunJournal(BaseCallbackHandler):
             "message_count": self._msg_count,
             "last_ai_message": self._last_ai_msg,
             "first_human_message": self._first_human_msg,
+            "operations_usage": {
+                "version": 1,
+                "tools": dict(self._tool_usage),
+                "skills": dict(self._skill_usage),
+            },
         }
 
     @property

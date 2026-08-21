@@ -263,7 +263,7 @@ class TestRunRepository:
     @pytest.mark.anyio
     async def test_update_run_completion(self, tmp_path):
         repo = await _make_repo(tmp_path)
-        await repo.put("r1", thread_id="t1", status="running")
+        await repo.put("r1", thread_id="t1", status="running", metadata={"agent_name": "公众号运营智能体"})
         updated = await repo.update_run_completion(
             "r1",
             status="success",
@@ -277,6 +277,11 @@ class TestRunRepository:
             message_count=3,
             last_ai_message="The answer is 42",
             first_human_message="What is the meaning?",
+            operations_usage={
+                "version": 1,
+                "tools": {"read_file": 2},
+                "skills": {"wechat-operations": 1},
+            },
         )
         row = await repo.get("r1")
         assert updated is True
@@ -287,6 +292,14 @@ class TestRunRepository:
         assert row["message_count"] == 3
         assert row["last_ai_message"] == "The answer is 42"
         assert row["first_human_message"] == "What is the meaning?"
+        assert row["metadata"] == {
+            "agent_name": "公众号运营智能体",
+            "operations_usage": {
+                "version": 1,
+                "tools": {"read_file": 2},
+                "skills": {"wechat-operations": 1},
+            },
+        }
         await _cleanup()
 
     @pytest.mark.anyio
@@ -347,7 +360,7 @@ class TestRunRepository:
     @pytest.mark.anyio
     async def test_update_run_progress_keeps_status_running(self, tmp_path):
         repo = await _make_repo(tmp_path)
-        await repo.put("r1", thread_id="t1", status="running")
+        await repo.put("r1", thread_id="t1", status="running", metadata={"agent_name": "writer"})
         await repo.update_run_progress(
             "r1",
             total_input_tokens=40,
@@ -356,6 +369,11 @@ class TestRunRepository:
             llm_call_count=1,
             message_count=2,
             last_ai_message="partial answer",
+            operations_usage={
+                "version": 1,
+                "tools": {"web_search": 1},
+                "skills": {},
+            },
         )
         row = await repo.get("r1")
         assert row["status"] == "running"
@@ -363,6 +381,14 @@ class TestRunRepository:
         assert row["llm_call_count"] == 1
         assert row["message_count"] == 2
         assert row["last_ai_message"] == "partial answer"
+        assert row["metadata"] == {
+            "agent_name": "writer",
+            "operations_usage": {
+                "version": 1,
+                "tools": {"web_search": 1},
+                "skills": {},
+            },
+        }
         await _cleanup()
 
     @pytest.mark.anyio

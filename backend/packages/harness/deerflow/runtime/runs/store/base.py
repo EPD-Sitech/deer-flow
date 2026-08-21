@@ -178,6 +178,7 @@ class RunStore(abc.ABC):
         message_count: int = 0,
         last_ai_message: str | None = None,
         first_human_message: str | None = None,
+        operations_usage: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> bool | None:
         """Persist final completion fields.
@@ -203,6 +204,7 @@ class RunStore(abc.ABC):
         message_count: int | None = None,
         last_ai_message: str | None = None,
         first_human_message: str | None = None,
+        operations_usage: dict[str, Any] | None = None,
     ) -> None:
         """Persist a best-effort running snapshot without changing run status."""
         return None

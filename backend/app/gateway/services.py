@@ -1168,6 +1168,25 @@ async def start_run(
             request_context=getattr(body, "context", None),
         )
 
+        # Persist the resolved expert identity with every run. The web chat
+        # intentionally uses the shared ``lead_agent`` assistant id, while
+        # the selected expert is carried in the runtime context. Keeping this
+        # small, non-secret snapshot on the run makes analytics independent of
+        # thread metadata update timing and preserves historical attribution.
+        resolved_agent_name: str | None = None
+        for section in ("context", "configurable"):
+            values = config.get(section)
+            candidate = values.get("agent_name") if isinstance(values, dict) else None
+            if isinstance(candidate, str) and candidate.strip():
+                resolved_agent_name = candidate.strip()
+                break
+        if resolved_agent_name is None and body.assistant_id and body.assistant_id != "lead_agent":
+            resolved_agent_name = body.assistant_id.strip()
+        run_metadata = dict(body.metadata or {})
+        run_metadata.pop("agent_name", None)
+        if resolved_agent_name:
+            run_metadata["agent_name"] = resolved_agent_name
+
         async def run_after_metadata(record: RunRecord) -> None:
             metadata_task = asyncio.create_task(
                 _ensure_thread_metadata(
@@ -1245,7 +1264,7 @@ async def start_run(
                     thread_id,
                     body.assistant_id,
                     on_disconnect=disconnect,
-                    metadata=body.metadata or {},
+                    metadata=run_metadata,
                     # Persist a secret-redacted copy of the config: the run record is
                     # written to runs.kwargs_json and echoed by the run API, so a
                     # request-scoped secret (#3861) must not ride along. The live

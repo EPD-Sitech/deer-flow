@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BotIcon, PlusSquare } from "lucide-react";
+import { PlusSquare } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -11,6 +11,10 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  AGENT_AVATAR_UPDATED_EVENT,
+  AgentAvatar,
+} from "@/components/workspace/agent-harness/agent-avatar";
 import { listAgentCatalog } from "@/components/workspace/agent-harness/agent-management-api";
 import { LocalAgentGuideQuestions } from "@/components/workspace/agent-harness/local-agent-guide-questions";
 import { AgentWelcome } from "@/components/workspace/agent-welcome";
@@ -92,6 +96,16 @@ export default function AgentChatPage() {
   const guideQuestions = catalogAgent?.guide_questions ?? [];
   const welcomeSuggestions = catalogAgent?.welcome_suggestions;
   const effectiveAgent = catalogAgent ?? agent;
+  const avatarScope = catalogAgent?.scope ?? "user";
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  useEffect(() => {
+    const handleUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
+      if (detail?.name === (catalogAgent?.name ?? agent_name) && detail.scope === avatarScope) setAvatarVersion((value) => value + 1);
+    };
+    window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+  }, [agent_name, avatarScope, catalogAgent?.name]);
   const agentDisplayName =
     effectiveAgent?.display_name ?? effectiveAgent?.name ?? agent_name;
 
@@ -294,7 +308,13 @@ export default function AgentChatPage() {
               <SidebarTrigger className="md:hidden" />
               {/* Agent badge */}
               <div className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1">
-                <BotIcon className="text-primary h-3.5 w-3.5" />
+                <AgentAvatar
+                  name={catalogAgent?.name ?? agent_name}
+                  scope={avatarScope}
+                  version={avatarVersion}
+                  alt=""
+                  className="size-4 rounded-full object-cover"
+                />
                 <span className="hidden max-w-24 truncate text-xs font-medium sm:inline sm:max-w-none">
                   {agentDisplayName}
                 </span>
@@ -453,6 +473,7 @@ export default function AgentChatPage() {
                           <AgentWelcome
                             agent={effectiveAgent}
                             agentName={agent_name}
+                            scope={avatarScope}
                           />
                         )
                       }

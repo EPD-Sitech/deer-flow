@@ -39,8 +39,7 @@ import { cn } from "@/lib/utils";
 
 import {
   AGENT_AVATAR_UPDATED_EVENT,
-  getAgentAvatarUrl,
-  getDefaultAgentAvatar,
+  AgentAvatar,
 } from "../agent-harness/agent-avatar";
 
 import { AgentSettingsDialog } from "./agent-settings-dialog";
@@ -148,9 +147,9 @@ export function AgentCard({ agent }: AgentCardProps) {
         <CardHeader className="pb-3">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <img
-                src={`${getAgentAvatarUrl(agent.name)}&v=${avatarVersion}`}
-                onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
+              <AgentAvatar
+                name={agent.name}
+                version={avatarVersion}
                 alt=""
                 className="h-9 w-9 shrink-0 rounded-full object-cover"
               />

@@ -49,8 +49,7 @@ import { useI18n } from "@/core/i18n/hooks";
 
 import {
   AGENT_AVATAR_UPDATED_EVENT,
-  getAgentAvatarUrl,
-  getDefaultAgentAvatar,
+  AgentAvatar,
 } from "./agent-avatar";
 import {
   cloneAgent,
@@ -267,9 +266,10 @@ export function LocalAgentCard({
             />
           )}
           <div className="flex min-w-0 items-center gap-2.5 pr-8">
-            <img
-              src={`${getAgentAvatarUrl(agent.name, scope)}&v=${avatarVersion}`}
-              onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
+            <AgentAvatar
+              name={agent.name}
+              scope={scope}
+              version={avatarVersion}
               alt=""
               className="size-10 shrink-0 rounded-full border border-white object-cover shadow-sm dark:border-slate-700"
             />

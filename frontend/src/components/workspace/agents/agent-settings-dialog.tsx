@@ -55,8 +55,7 @@ import { parseSubAgentsFromSoul } from "@/lib/sub-agent-parser";
 import { cn } from "@/lib/utils";
 
 import {
-  getAgentAvatarUrl,
-  getDefaultAgentAvatar,
+  AgentAvatar,
   notifyAgentAvatarUpdated,
 } from "../agent-harness/agent-avatar";
 import {
@@ -490,9 +489,10 @@ export function AgentSettingsDialog({
               <div className="space-y-1">
                 <span className="text-foreground block text-xs font-medium">头像</span>
                 <div className="flex items-center gap-3 rounded-md border p-2.5">
-                  <img
-                    src={`${getAgentAvatarUrl(agent.name, scope)}&v=${avatarVersion}`}
-                    onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
+                  <AgentAvatar
+                    name={agent.name}
+                    scope={scope}
+                    version={avatarVersion}
                     alt=""
                     className="size-14 rounded-full object-cover"
                   />

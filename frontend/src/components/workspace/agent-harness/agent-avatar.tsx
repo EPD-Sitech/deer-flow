@@ -1,3 +1,5 @@
+import { useState, type ImgHTMLAttributes } from "react";
+
 import { getBackendBaseURL } from "@/core/config";
 
 export const AGENT_AVATAR_UPDATED_EVENT = "deerflow:agent-avatar-updated";
@@ -29,7 +31,7 @@ function hashName(name: string) {
 }
 
 export function getDefaultAgentAvatar(name: string) {
-  return `/agent-avatars/${SPECIAL_AVATARS[name] ?? DEFAULT_AVATARS[hashName(name) % DEFAULT_AVATARS.length]}`;
+  return `/images/agent-avatars/${SPECIAL_AVATARS[name] ?? DEFAULT_AVATARS[hashName(name) % DEFAULT_AVATARS.length]}`;
 }
 
 export function getAgentAvatarUrl(name: string, scope: "user" | "platform" = "user") {
@@ -39,5 +41,27 @@ export function getAgentAvatarUrl(name: string, scope: "user" | "platform" = "us
 export function notifyAgentAvatarUpdated(name: string, scope: "user" | "platform") {
   window.dispatchEvent(
     new CustomEvent(AGENT_AVATAR_UPDATED_EVENT, { detail: { name, scope } }),
+  );
+}
+
+export function AgentAvatar({
+  name,
+  scope = "user",
+  version = 0,
+  ...props
+}: Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "onError"> & {
+  name: string;
+  scope?: "user" | "platform";
+  version?: number;
+}) {
+  const [failedVersion, setFailedVersion] = useState<number | null>(null);
+  const failed = failedVersion === version;
+  return (
+    <img
+      {...props}
+      alt={props.alt ?? ""}
+      src={failed ? getDefaultAgentAvatar(name) : `${getAgentAvatarUrl(name, scope)}&v=${version}`}
+      onError={() => setFailedVersion(version)}
+    />
   );
 }

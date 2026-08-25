@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  BotIcon,
   BrainIcon,
   CalendarClockIcon,
   FileCode2Icon,
@@ -15,7 +16,7 @@ import {
   Trash2Icon,
   UploadIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Agent, AgentWelcomeSuggestion } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
+import { parseSubAgentsFromSoul } from "@/lib/sub-agent-parser";
 
 import {
   createAgentVersion,
@@ -109,6 +111,10 @@ export function LocalAgentDetailDialog({
   const subAgentInput = useRef<HTMLInputElement>(null);
   const [subAgentFile, setSubAgentFile] = useState<File | null>(null);
   const [subAgentLoading, setSubAgentLoading] = useState(false);
+  const parsedSubAgents = useMemo(
+    () => parseSubAgentsFromSoul(soul),
+    [soul],
+  );
 
   const loadFiles = useCallback(async () => {
     setFilesLoading(true);
@@ -702,6 +708,63 @@ export function LocalAgentDetailDialog({
                     )}
                     {zh ? "导入包" : "Import package"}
                   </Button>
+                </div>
+                <div className="space-y-3 border-t pt-5">
+                  <SectionHeading
+                    title={zh ? "已配置子智能体" : "Configured sub-agents"}
+                    description={
+                      zh
+                        ? `当前 SOUL.md 中已配置 ${parsedSubAgents.length} 个子智能体。`
+                        : `${parsedSubAgents.length} sub-agent(s) are configured in SOUL.md.`
+                    }
+                  />
+                  {filesLoading ? (
+                    <LoadingState />
+                  ) : parsedSubAgents.length === 0 ? (
+                    <EmptyState
+                      text={
+                        zh
+                          ? "当前智能体还没有配置子智能体"
+                          : "No sub-agents are configured yet"
+                      }
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {parsedSubAgents.map((subAgent) => (
+                        <div
+                          key={`${subAgent.name}:${subAgent.displayName}`}
+                          className="rounded-lg border p-3"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <BotIcon className="text-primary size-4 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                              {subAgent.displayName}
+                            </span>
+                            <span className="text-muted-foreground shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]">
+                              {subAgent.name}
+                            </span>
+                          </div>
+                          {subAgent.tools.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {subAgent.tools.map((tool) => (
+                                <span
+                                  key={tool}
+                                  className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]"
+                                >
+                                  {tool}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {subAgent.prompt && (
+                            <p className="text-muted-foreground mt-2 line-clamp-3 text-xs leading-5">
+                              {subAgent.prompt}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 

@@ -104,6 +104,23 @@ class SqlAgentStore(AgentStore):
             raise FileNotFoundError(f"Agent config not found: {name} (user {effective_user})")
         return parse_agent_config(row.config or {}, row.name)
 
+    def get_raw_config(self, name: str, *, user_id: str | None = None) -> dict:
+        """Return the stored document without dropping unmanaged fields.
+
+        ``AgentConfig`` intentionally validates only runtime fields, while the
+        management API also persists migration-owned data such as
+        ``ui.guide_questions``.  Callers that need to round-trip that data must
+        read the JSON document directly instead of going through ``get()``.
+        """
+        effective_user = user_id or get_effective_user_id()
+        with self._Session() as session:
+            row = self._row(session, name, effective_user)
+        if row is None:
+            raise FileNotFoundError(f"Agent config not found: {name} (user {effective_user})")
+        document = dict(row.config or {})
+        document.setdefault("name", row.name)
+        return document
+
     def exists(self, name: str, *, user_id: str | None = None) -> bool:
         effective_user = user_id or get_effective_user_id()
         with self._Session() as session:

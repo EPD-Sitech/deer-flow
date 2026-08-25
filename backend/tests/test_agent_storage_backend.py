@@ -9,6 +9,8 @@ import pytest
 import yaml
 from sqlalchemy import create_engine
 
+from app.gateway.agent_management.platform_db_store import PlatformDbAgentStore
+from app.gateway.agent_management.service import AgentManagementService
 from app.gateway.deps import _validate_agent_storage
 from deerflow.config.agent_storage_config import AgentStorageConfig
 from deerflow.config.app_config import reset_app_config
@@ -36,6 +38,54 @@ def test_file_is_the_default_backend():
 
 def test_db_backend_builds_sql_store(tmp_path):
     assert isinstance(make_agent_store(_cfg("db", "sqlite", str(tmp_path))), SqlAgentStore)
+
+
+def test_sql_store_raw_config_preserves_unmanaged_ui_fields(tmp_path, monkeypatch):
+    cfg = _cfg("db", "sqlite", str(tmp_path / "db"))
+    (tmp_path / "db").mkdir()
+    engine = create_engine(cfg.database.app_sync_sqlalchemy_url)
+    Base.metadata.create_all(engine, tables=[AgentRow.__table__])
+    engine.dispose()
+
+    store = SqlAgentStore(cfg.database.app_sync_sqlalchemy_url)
+    store.create(
+        "guide-agent",
+        {
+            "name": "guide-agent",
+            "description": "Keeps guide questions",
+            "ui": {"guide_questions": [{"question": "保存后仍然存在吗？"}]},
+        },
+        "guide soul",
+        user_id="u1",
+    )
+
+    expected_ui = {"guide_questions": [{"question": "保存后仍然存在吗？"}]}
+    assert store.get_raw_config("guide-agent", user_id="u1")["ui"] == expected_ui
+
+    monkeypatch.setattr(
+        "app.gateway.agent_management.platform_db_store.get_public_platform_agent_owner",
+        lambda name: "u1" if name == "guide-agent" else None,
+    )
+    platform_service = AgentManagementService(
+        store=PlatformDbAgentStore(store),
+        user_id="admin",
+        state_dir=tmp_path,
+    )
+    details = platform_service.describe("guide-agent")
+    assert details["ui"] == expected_ui
+
+    updated_ui = {"guide_questions": [{"question": "更新后仍然存在吗？"}]}
+    platform_service.update_files(
+        "guide-agent",
+        config_yaml="name: guide-agent\ndescription: Updated guide agent\n",
+        guide_questions=updated_ui["guide_questions"],
+    )
+    reloaded = AgentManagementService(
+        store=PlatformDbAgentStore(store),
+        user_id="admin",
+        state_dir=tmp_path,
+    )
+    assert reloaded.describe("guide-agent")["ui"] == updated_ui
 
 
 def test_db_backend_on_memory_database_is_rejected():

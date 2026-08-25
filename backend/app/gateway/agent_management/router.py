@@ -16,7 +16,7 @@ from urllib.parse import quote
 
 import yaml
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -39,6 +39,7 @@ from deerflow.agents.lead_agent.prompt import refresh_user_skills_system_prompt_
 from deerflow.agents.memory import get_memory_manager
 from deerflow.config.app_config import get_app_config
 from deerflow.config.paths import get_paths
+from deerflow.config.agents_config import resolve_agent_dir
 from deerflow.models.factory import create_chat_model
 from deerflow.persistence.agents import AgentExistsError, get_agent_store
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id
@@ -173,6 +174,61 @@ def _http_error(exc: Exception) -> HTTPException:
 def _attachment_header(filename: str) -> str:
     ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "agent-export"
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+
+
+def _avatar_dir(name: str, scope: AgentScope) -> Path:
+    paths = get_paths()
+    normalized = normalize_agent_name(name)
+    if scope == "platform":
+        return paths.agent_dir(normalized)
+    return resolve_agent_dir(normalized, user_id=get_effective_user_id())
+
+
+@router.get("/agents/{name}/avatar")
+async def get_agent_avatar(name: str, scope: AgentScope = "user") -> FileResponse:
+    _require_agents_api_enabled()
+    try:
+        if scope == "platform":
+            _service(scope, require_platform_admin=False).describe(name)
+        else:
+            _service(scope, require_platform_admin=False).describe(name)
+        avatar = _avatar_dir(name, scope) / "avatar.png"
+        if not avatar.is_file():
+            raise HTTPException(status_code=404, detail="Agent has no uploaded avatar")
+        type_file = avatar.with_name(".avatar-type")
+        media_type = type_file.read_text(encoding="ascii").strip() if type_file.is_file() else "image/png"
+        return FileResponse(avatar, media_type=media_type, headers={"Cache-Control": "no-cache"})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/agents/{name}/avatar")
+async def upload_agent_avatar(
+    name: str,
+    file: UploadFile = File(...),
+    scope: AgentScope = "user",
+) -> dict[str, str]:
+    _require_agents_api_enabled()
+    if file.content_type not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(status_code=422, detail="Avatar must be PNG, JPEG, or WebP")
+    try:
+        _service(scope).describe(name)
+        content = await file.read(5 * 1024 * 1024 + 1)
+        if len(content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Avatar must be no larger than 5MB")
+        directory = _avatar_dir(name, scope)
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = directory / f".avatar.{uuid.uuid4().hex}.tmp"
+        temporary.write_bytes(content)
+        temporary.replace(directory / "avatar.png")
+        directory.joinpath(".avatar-type").write_text(file.content_type, encoding="ascii")
+        return {"avatar_url": f"/api/agents/{normalize_agent_name(name)}/avatar?scope={scope}"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _http_error(exc) from exc
 
 
 class AgentSettingsWelcomeSuggestion(BaseModel):
@@ -569,6 +625,13 @@ async def update_agent_settings(
                     soul,
                     user_id=get_effective_user_id(),
                 )
+                source_avatar = _avatar_dir(name, scope) / "avatar.png"
+                target_avatar = _avatar_dir(name, target_scope) / "avatar.png"
+                if source_avatar.is_file():
+                    shutil.copyfile(source_avatar, target_avatar)
+                    source_type = source_avatar.with_name(".avatar-type")
+                    if source_type.is_file():
+                        shutil.copyfile(source_type, target_avatar.with_name(".avatar-type"))
                 await asyncio.to_thread(
                     _service(scope, require_platform_admin=False).store.delete,
                     name,

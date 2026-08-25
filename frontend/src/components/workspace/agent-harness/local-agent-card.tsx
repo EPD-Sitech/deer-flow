@@ -16,6 +16,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   useMemo,
+  useEffect,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -46,7 +47,11 @@ import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 
-import { getAgentAvatarUrl, getDefaultAgentAvatar } from "./agent-avatar";
+import {
+  AGENT_AVATAR_UPDATED_EVENT,
+  getAgentAvatarUrl,
+  getDefaultAgentAvatar,
+} from "./agent-avatar";
 import {
   cloneAgent,
   deletePlatformAgent,
@@ -99,11 +104,20 @@ export function LocalAgentCard({
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [deletingPlatform, setDeletingPlatform] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState(0);
   const categoryId = getLocalAgentCategoryIds(agent)[0] ?? "other";
   const categoryLabel = getLocalAgentCategoryLabel(categoryId, locale);
   const colors = CATEGORY_COLORS[categoryId];
   const scope: AgentScope =
     "scope" in agent && agent.scope === "platform" ? "platform" : "user";
+  useEffect(() => {
+    const handleUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
+      if (detail?.name === agent.name && detail.scope === scope) setAvatarVersion((value) => value + 1);
+    };
+    window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+  }, [agent.name, scope]);
   const isPlatform = scope === "platform";
   const runtimeName = "runtime_name" in agent ? agent.runtime_name : agent.name;
   const displayName = agent.display_name ?? agent.name;
@@ -254,7 +268,7 @@ export function LocalAgentCard({
           )}
           <div className="flex min-w-0 items-center gap-2.5 pr-8">
             <img
-              src={getAgentAvatarUrl(agent.name, scope)}
+              src={`${getAgentAvatarUrl(agent.name, scope)}&v=${avatarVersion}`}
               onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
               alt=""
               className="size-10 shrink-0 rounded-full border border-white object-cover shadow-sm dark:border-slate-700"

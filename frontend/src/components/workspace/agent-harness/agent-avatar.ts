@@ -1,5 +1,7 @@
 import { getBackendBaseURL } from "@/core/config";
 
+export const AGENT_AVATAR_UPDATED_EVENT = "deerflow:agent-avatar-updated";
+
 const DEFAULT_AVATARS = [
   "expert-01.png",
   "expert-02.png",
@@ -32,4 +34,10 @@ export function getDefaultAgentAvatar(name: string) {
 
 export function getAgentAvatarUrl(name: string, scope: "user" | "platform" = "user") {
   return `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}/avatar?scope=${scope}`;
+}
+
+export function notifyAgentAvatarUpdated(name: string, scope: "user" | "platform") {
+  window.dispatchEvent(
+    new CustomEvent(AGENT_AVATAR_UPDATED_EVENT, { detail: { name, scope } }),
+  );
 }

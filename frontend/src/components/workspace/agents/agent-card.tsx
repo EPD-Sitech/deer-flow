@@ -6,7 +6,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ComponentProps, type ReactElement, useState } from "react";
+import { type ComponentProps, type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +37,11 @@ import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-import { getAgentAvatarUrl, getDefaultAgentAvatar } from "../agent-harness/agent-avatar";
+import {
+  AGENT_AVATAR_UPDATED_EVENT,
+  getAgentAvatarUrl,
+  getDefaultAgentAvatar,
+} from "../agent-harness/agent-avatar";
 
 import { AgentSettingsDialog } from "./agent-settings-dialog";
 
@@ -114,6 +118,15 @@ export function AgentCard({ agent }: AgentCardProps) {
   const deleteAgent = useDeleteAgent();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  useEffect(() => {
+    const handleUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
+      if (detail?.name === agent.name && detail.scope === "user") setAvatarVersion((value) => value + 1);
+    };
+    window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+  }, [agent.name]);
 
   function handleChat() {
     router.push(`/workspace/agents/${agent.name}/chats/new`);
@@ -136,7 +149,7 @@ export function AgentCard({ agent }: AgentCardProps) {
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <img
-                src={getAgentAvatarUrl(agent.name)}
+                src={`${getAgentAvatarUrl(agent.name)}&v=${avatarVersion}`}
                 onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
                 alt=""
                 className="h-9 w-9 shrink-0 rounded-full object-cover"

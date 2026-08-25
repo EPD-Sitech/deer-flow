@@ -57,6 +57,7 @@ import { cn } from "@/lib/utils";
 import {
   getAgentAvatarUrl,
   getDefaultAgentAvatar,
+  notifyAgentAvatarUpdated,
 } from "../agent-harness/agent-avatar";
 import {
   createAgentVersion,
@@ -447,6 +448,7 @@ export function AgentSettingsDialog({
       );
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? "头像上传失败");
       setAvatarVersion((value) => value + 1);
+      notifyAgentAvatarUpdated(agent.name, scope);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success("头像已更新");
     } catch (error) {

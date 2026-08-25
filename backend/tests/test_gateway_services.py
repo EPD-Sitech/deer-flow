@@ -1854,6 +1854,44 @@ def test_start_run_persists_resolved_agent_name_for_analytics(_stub_app_config):
     asyncio.run(_scenario())
 
 
+def test_start_run_resolves_public_platform_agent_config_owner(_stub_app_config):
+    import asyncio
+    from unittest.mock import patch
+
+    from app.gateway.routers.thread_runs import RunCreateRequest
+    from app.gateway.services import start_run
+    from deerflow.runtime.context_keys import AGENT_CONFIG_USER_ID_CONTEXT_KEY
+
+    async def _scenario():
+        request, _run_store, _thread_store = _make_start_run_persistence_context()
+        captured: dict[str, object] = {}
+
+        async def fake_run_agent(*args, **kwargs):
+            captured["config"] = kwargs["config"]
+
+        with (
+            patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+            patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+            patch("app.gateway.services._lookup_public_platform_agent_owner", return_value="publisher-user"),
+        ):
+            record = await start_run(
+                RunCreateRequest(
+                    assistant_id="lead_agent",
+                    input={"messages": [{"role": "user", "content": "hi"}]},
+                    context={"agent_name": "agent-public"},
+                ),
+                "thread-platform-owner",
+                request,
+            )
+            await record.task
+
+        config = captured["config"]
+        assert config["context"][AGENT_CONFIG_USER_ID_CONTEXT_KEY] == "publisher-user"
+        assert AGENT_CONFIG_USER_ID_CONTEXT_KEY not in config["configurable"]
+
+    asyncio.run(_scenario())
+
+
 def test_start_run_translates_resume_command_to_langgraph_command(_stub_app_config):
     import asyncio
 

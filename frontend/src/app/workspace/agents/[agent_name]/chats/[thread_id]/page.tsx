@@ -79,7 +79,6 @@ export default function AgentChatPage() {
     agent_name: string;
   }>();
 
-  const { agent } = useAgent(agent_name);
   const { data: localAgentCatalog = [], isPending: isCatalogPending } =
     useQuery({
       queryKey: ["agents", "catalog"],
@@ -93,6 +92,13 @@ export default function AgentChatPage() {
       ),
     [agent_name, localAgentCatalog],
   );
+  // Platform catalog entries use a runtime alias that is intentionally not
+  // present in the current user's custom-agent scope. Wait for the catalog
+  // before falling back to the user-agent endpoint so a public Agent does not
+  // generate a misleading `/api/agents/{runtime_name}` 404.
+  const { agent } = useAgent(agent_name, {
+    enabled: !isCatalogPending && !catalogAgent,
+  });
   const guideQuestions = catalogAgent?.guide_questions ?? [];
   const welcomeSuggestions = catalogAgent?.welcome_suggestions;
   const effectiveAgent = catalogAgent ?? agent;

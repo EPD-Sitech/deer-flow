@@ -9,3 +9,9 @@ CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY: Final[str] = "__deerflow_pre_run_messa
 # factory. Lives only in runtime context — never configurable/checkpoint — so
 # the apiKey never touches persisted run state.
 TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY: Final[str] = "__deerflow_transit_model_overrides"
+
+# Gateway-resolved owner of a public platform Agent. This is deliberately
+# separate from the authenticated runtime user: platform configuration is
+# readable by everyone, while files, memory, and other user-scoped state must
+# remain owned by the person running the conversation.
+AGENT_CONFIG_USER_ID_CONTEXT_KEY: Final[str] = "__deerflow_agent_config_user_id"

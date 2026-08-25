@@ -65,7 +65,7 @@ from deerflow.runtime.checkpoint_mode import (
     frozen_checkpoint_channel_mode,
     inject_checkpoint_mode,
 )
-from deerflow.runtime.context_keys import TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY
+from deerflow.runtime.context_keys import AGENT_CONFIG_USER_ID_CONTEXT_KEY, TRANSIT_MODEL_OVERRIDES_CONTEXT_KEY
 from deerflow.skills.types import Skill
 from deerflow.tracing import build_tracing_callbacks
 
@@ -721,8 +721,11 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
     is_bootstrap = cfg.get("is_bootstrap", False)
     non_interactive = bool(cfg.get("non_interactive", False))
     agent_name = validate_agent_name(cfg.get("agent_name"))
+    agent_config_user_id = cfg.get(AGENT_CONFIG_USER_ID_CONTEXT_KEY)
+    if not isinstance(agent_config_user_id, str) or not agent_config_user_id:
+        agent_config_user_id = resolved_user_id
 
-    agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+    agent_config = load_agent_config(agent_name, user_id=agent_config_user_id) if not is_bootstrap else None
     available_skills = _available_skill_names(agent_config, is_bootstrap)
     # Custom agent model from agent config (if any), or None to let _resolve_model_name pick the default
     agent_model_name = agent_config.model if agent_config and agent_config.model else None
@@ -968,6 +971,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
             deferred_names=setup.deferred_names,
             mcp_routing_hints_section=mcp_routing_hints_section,
             user_id=resolved_user_id,
+            agent_config_user_id=agent_config_user_id,
             skill_names=skill_setup.skill_names or None,
         ),
         state_schema=get_thread_state_schema(mode),

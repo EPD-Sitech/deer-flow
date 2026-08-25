@@ -67,6 +67,7 @@ from deerflow.runtime.checkpoint_mode import (
     inject_checkpoint_mode,
 )
 from deerflow.runtime.checkpoint_state import graph_state_schema
+from deerflow.runtime.context_keys import AGENT_CONFIG_USER_ID_CONTEXT_KEY
 from deerflow.runtime.goal import goal_thread_lock
 from deerflow.runtime.journal import build_checkpoint_history_seed_events
 from deerflow.runtime.runs.naming import resolve_root_run_name
@@ -81,6 +82,16 @@ from deerflow.utils.messages import ORIGINAL_USER_CONTENT_KEY
 from deerflow.utils.thread_id import validate_thread_id
 
 logger = logging.getLogger(__name__)
+
+
+def _lookup_public_platform_agent_owner(agent_name: str) -> str | None:
+    """Resolve a public platform Agent owner without importing router modules at startup."""
+    # ``app.gateway.agent_management`` exports routers from its package
+    # initializer, which imports the Gateway services module in turn. Keep
+    # this lookup lazy to avoid that import cycle during application startup.
+    from app.gateway.agent_management.platform_metadata import get_public_platform_agent_owner
+
+    return get_public_platform_agent_owner(agent_name)
 
 
 @asynccontextmanager
@@ -323,6 +334,8 @@ _CONTEXT_INTERNAL_CALLER_KEYS: frozenset[str] = frozenset({"non_interactive"})
 #   ``authz_attributes``        — Phase 1A has no Gateway-side producer; cleared.
 #   ``channel_user_id``         — accepted only from trusted internal context.
 #   ``langgraph_auth_user*``    — populated only by LangGraph Server auth.
+#   ``AGENT_CONFIG_USER_ID_CONTEXT_KEY`` — resolved by the Gateway for public
+#       platform Agents; never accepted from a caller.
 _SERVER_OWNED_AUTHZ_CONTEXT_KEYS: frozenset[str] = frozenset(
     {
         "is_internal",
@@ -330,6 +343,7 @@ _SERVER_OWNED_AUTHZ_CONTEXT_KEYS: frozenset[str] = frozenset(
         "channel_user_id",
         "langgraph_auth_user",
         "langgraph_auth_user_id",
+        AGENT_CONFIG_USER_ID_CONTEXT_KEY,
     }
 )
 
@@ -1182,6 +1196,21 @@ async def start_run(
                 break
         if resolved_agent_name is None and body.assistant_id and body.assistant_id != "lead_agent":
             resolved_agent_name = body.assistant_id.strip()
+
+        # Public platform Agents are stored under their publishing user's
+        # scope. Resolve that owner from server-side platform metadata and
+        # carry it in a private runtime-only context key so the harness can
+        # read the Agent config/SOUL while all conversation state remains
+        # scoped to the authenticated caller. Never accept an owner id from
+        # the request body.
+        if resolved_agent_name:
+            platform_owner_user_id = await asyncio.to_thread(
+                _lookup_public_platform_agent_owner,
+                resolved_agent_name,
+            )
+            if platform_owner_user_id:
+                config.setdefault("context", {})[AGENT_CONFIG_USER_ID_CONTEXT_KEY] = platform_owner_user_id
+
         run_metadata = dict(body.metadata or {})
         run_metadata.pop("agent_name", None)
         if resolved_agent_name:

@@ -63,11 +63,14 @@ export function useAgents() {
   return { agents: data ?? [], isLoading, error };
 }
 
-export function useAgent(name: string | null | undefined) {
+export function useAgent(
+  name: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["agents", name],
     queryFn: () => getAgent(name!),
-    enabled: !!name,
+    enabled: !!name && (options?.enabled ?? true),
   });
   return { agent: data ?? null, isLoading, error };
 }

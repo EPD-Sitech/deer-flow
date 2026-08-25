@@ -183,6 +183,59 @@ def test_make_lead_agent_uses_server_auth_identity_for_all_user_scoped_inputs(mo
     }
 
 
+def test_make_lead_agent_reads_public_agent_config_from_gateway_owner(monkeypatch):
+    """A public Agent's config owner must not replace the chat user's identity."""
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    captured: dict[str, object] = {}
+
+    import deerflow.tools as tools_module
+
+    def _load_agent_config(name, *, user_id=None):
+        captured["agent_config_user_id"] = user_id
+        return AgentConfig(name=name)
+
+    def _load_skills(available_skills, *, app_config, user_id=None):
+        captured["skills_user_id"] = user_id
+        return []
+
+    def _build_middlewares(config, model_name, agent_name=None, **kwargs):
+        captured["middleware_user_id"] = kwargs.get("user_id")
+        return []
+
+    def _apply_prompt_template(**kwargs):
+        captured["prompt_user_id"] = kwargs.get("user_id")
+        captured["prompt_agent_config_user_id"] = kwargs.get("agent_config_user_id")
+        return "system prompt"
+
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", _load_agent_config)
+    monkeypatch.setattr(lead_agent_module, "_load_enabled_available_skills", _load_skills)
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", _build_middlewares)
+    monkeypatch.setattr(lead_agent_module, "apply_prompt_template", _apply_prompt_template)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+    monkeypatch.setattr(lead_agent_module, "build_tracing_callbacks", lambda: [])
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
+
+    lead_agent_module._make_lead_agent(
+        {
+            "context": {
+                "agent_name": "agent-public",
+                "user_id": "viewer-user",
+                "__deerflow_agent_config_user_id": "publisher-user",
+            }
+        },
+        app_config=app_config,
+    )
+
+    assert captured == {
+        "agent_config_user_id": "publisher-user",
+        "skills_user_id": "viewer-user",
+        "middleware_user_id": "viewer-user",
+        "prompt_user_id": "viewer-user",
+        "prompt_agent_config_user_id": "publisher-user",
+    }
+
+
 def test_make_lead_agent_scopes_bootstrap_middlewares_to_custom_agent(monkeypatch):
     app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
     captured: dict[str, object] = {}

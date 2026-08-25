@@ -1001,6 +1001,7 @@ def apply_prompt_template(
     deferred_names: frozenset[str] = frozenset(),
     mcp_routing_hints_section: str = "",
     user_id: str | None = None,
+    agent_config_user_id: str | None = None,
     skill_names: frozenset[str] | None = None,
 ) -> str:
     # Include subagent section only if enabled (from runtime parameter)
@@ -1070,7 +1071,7 @@ def apply_prompt_template(
     # identical across users and sessions for maximum prefix-cache reuse.
     return SYSTEM_PROMPT_TEMPLATE.format(
         agent_name=agent_name or "DeerFlow 2.0",
-        soul=get_agent_soul(agent_name, user_id=user_id),
+        soul=get_agent_soul(agent_name, user_id=agent_config_user_id or user_id),
         self_update_section=_build_self_update_section(agent_name),
         skills_section=skills_section,
         deferred_tools_section=deferred_tools_section,

@@ -2,7 +2,6 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  BotIcon,
   CalendarClockIcon,
   CopyIcon,
   DownloadIcon,
@@ -47,6 +46,7 @@ import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 
+import { getAgentAvatarUrl, getDefaultAgentAvatar } from "./agent-avatar";
 import {
   cloneAgent,
   deletePlatformAgent,
@@ -252,9 +252,12 @@ export function LocalAgentCard({
             />
           )}
           <div className="flex min-w-0 items-center gap-2.5 pr-8">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-white bg-[color:var(--local-agent-tint)] text-[color:var(--local-agent-accent)] shadow-sm dark:border-slate-700 dark:bg-slate-800">
-              <BotIcon className="size-[18px]" />
-            </div>
+            <img
+              src={getAgentAvatarUrl(agent.name, scope)}
+              onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
+              alt=""
+              className="size-10 shrink-0 rounded-full border border-white object-cover shadow-sm dark:border-slate-700"
+            />
             <div className="min-w-0">
               <h2 className="truncate text-[13px] leading-5 font-semibold text-[#173a5b] dark:text-slate-100">
                 {agent.name}

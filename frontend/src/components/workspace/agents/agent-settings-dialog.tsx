@@ -16,6 +16,7 @@ import {
   WrenchIcon,
   XCircleIcon,
   ZapIcon,
+  UploadIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -43,7 +44,9 @@ import type {
   SubAgentInfo,
   UpdateAgentRequest,
 } from "@/core/agents";
+import { fetch as authenticatedFetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useMCPConfig } from "@/core/mcp/hooks";
 import { useModels } from "@/core/models/hooks";
@@ -51,6 +54,10 @@ import { useSkills } from "@/core/skills/hooks";
 import { parseSubAgentsFromSoul } from "@/lib/sub-agent-parser";
 import { cn } from "@/lib/utils";
 
+import {
+  getAgentAvatarUrl,
+  getDefaultAgentAvatar,
+} from "../agent-harness/agent-avatar";
 import {
   createAgentVersion,
   getAgentLogs,
@@ -185,6 +192,8 @@ export function AgentSettingsDialog({
   const [settingsSaving, setSettingsSaving] = useState(false);
 
   const [description, setDescription] = useState(agent.description ?? "");
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [targetScope, setTargetScope] = useState<AgentScope>(scope);
   const [category, setCategory] = useState<LocalAgentCategoryId>(
     () =>
@@ -423,6 +432,30 @@ export function AgentSettingsDialog({
     }
   }
 
+  async function handleAvatarUpload(file: File) {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+      toast.error("请选择 PNG、JPEG 或 WebP 图片，且大小不超过 5MB");
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await authenticatedFetch(
+        `${getBackendBaseURL()}/api/agents/${encodeURIComponent(agent.name)}/avatar?scope=${scope}`,
+        { method: "POST", body },
+      );
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? "头像上传失败");
+      setAvatarVersion((value) => value + 1);
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+      toast.success("头像已更新");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(760px,calc(100dvh-48px))] max-h-[calc(100dvh-48px)] flex-col gap-0 overflow-visible p-0 sm:max-w-[560px]">
@@ -451,6 +484,24 @@ export function AgentSettingsDialog({
                 <p className="text-muted-foreground text-[11px]">
                   智能体名称作为唯一标识，暂不支持重命名
                 </p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-foreground block text-xs font-medium">头像</span>
+                <div className="flex items-center gap-3 rounded-md border p-2.5">
+                  <img
+                    src={`${getAgentAvatarUrl(agent.name, scope)}&v=${avatarVersion}`}
+                    onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getDefaultAgentAvatar(agent.name); }}
+                    alt=""
+                    className="size-14 rounded-full object-cover"
+                  />
+                  <label className="cursor-pointer">
+                    <Button type="button" variant="outline" size="sm" disabled={avatarUploading} asChild>
+                      <span><UploadIcon className="mr-1.5 size-3.5" />{avatarUploading ? "上传中…" : "上传头像"}</span>
+                    </Button>
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAvatarUpload(file); event.target.value = ""; }} />
+                  </label>
+                  <span className="text-muted-foreground text-[11px]">未上传时使用系统默认头像</span>
+                </div>
               </div>
               <div className="space-y-1">
                 <span className="text-foreground block text-xs font-medium">

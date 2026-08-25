@@ -5,25 +5,25 @@ import { getBackendBaseURL } from "@/core/config";
 export const AGENT_AVATAR_UPDATED_EVENT = "deerflow:agent-avatar-updated";
 
 const DEFAULT_AVATARS = [
-  "expert-01.png",
-  "expert-02.png",
-  "expert-03.png",
-  "expert-04.png",
-  "expert-05.png",
-  "expert-06.png",
-  "expert-07.png",
-  "expert-08.png",
-  "expert-09.png",
-  "expert-10.png",
-  "financial-quant-expert.png",
-  "frontend-design-expert.png",
-  "risk-control-expert.png",
+  "expert-01.jpg",
+  "expert-02.jpg",
+  "expert-03.jpg",
+  "expert-04.jpg",
+  "expert-05.jpg",
+  "expert-06.jpg",
+  "expert-07.jpg",
+  "expert-08.jpg",
+  "expert-09.jpg",
+  "expert-10.jpg",
+  "financial-quant-expert.jpg",
+  "frontend-design-expert.jpg",
+  "risk-control-expert.jpg",
 ] as const;
 
 const SPECIAL_AVATARS: Record<string, string> = {
-  "financial-quant-expert": "financial-quant-expert.png",
-  "frontend-design-expert": "frontend-design-expert.png",
-  "risk-control-expert": "risk-control-expert.png",
+  "financial-quant-expert": "financial-quant-expert.jpg",
+  "frontend-design-expert": "frontend-design-expert.jpg",
+  "risk-control-expert": "risk-control-expert.jpg",
 };
 
 function hashName(name: string) {
@@ -61,6 +61,9 @@ export function AgentAvatar({
       {...props}
       alt={props.alt ?? ""}
       src={failed ? getDefaultAgentAvatar(name) : `${getAgentAvatarUrl(name, scope)}&v=${version}`}
+      onLoad={(event) => {
+        if (event.currentTarget.naturalWidth === 0) setFailedVersion(version);
+      }}
       onError={() => setFailedVersion(version)}
     />
   );

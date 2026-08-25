@@ -185,7 +185,7 @@ def _avatar_dir(name: str, scope: AgentScope) -> Path:
 
 
 @router.get("/agents/{name}/avatar")
-async def get_agent_avatar(name: str, scope: AgentScope = "user") -> FileResponse:
+async def get_agent_avatar(name: str, scope: AgentScope = "user") -> Response:
     _require_agents_api_enabled()
     try:
         if scope == "platform":
@@ -194,7 +194,7 @@ async def get_agent_avatar(name: str, scope: AgentScope = "user") -> FileRespons
             _service(scope, require_platform_admin=False).describe(name)
         avatar = _avatar_dir(name, scope) / "avatar.png"
         if not avatar.is_file():
-            raise HTTPException(status_code=404, detail="Agent has no uploaded avatar")
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
         type_file = avatar.with_name(".avatar-type")
         media_type = type_file.read_text(encoding="ascii").strip() if type_file.is_file() else "image/png"
         return FileResponse(avatar, media_type=media_type, headers={"Cache-Control": "no-cache"})

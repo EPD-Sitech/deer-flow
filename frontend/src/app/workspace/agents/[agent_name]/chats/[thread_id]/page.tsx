@@ -100,6 +100,7 @@ export default function AgentChatPage() {
     enabled: !isCatalogPending && !catalogAgent,
   });
   const guideQuestions = catalogAgent?.guide_questions ?? [];
+  const longWelcome = guideQuestions.length > 4;
   const welcomeSuggestions = catalogAgent?.welcome_suggestions;
   const effectiveAgent = catalogAgent ?? agent;
   const avatarScope = catalogAgent?.scope ?? "user";
@@ -302,10 +303,10 @@ export default function AgentChatPage() {
         isMock={isMock}
       >
         <ChatBox threadId={threadId} browserEnabled={browserEnabled}>
-          <div className="relative flex size-full min-h-0 justify-between">
+          <div className="relative flex size-full min-h-0 flex-col justify-between">
             <header
               className={cn(
-                "absolute top-0 right-0 left-0 z-30 flex h-12 shrink-0 items-center gap-2 px-2 sm:px-4",
+                "relative z-30 flex h-12 shrink-0 items-center gap-2 px-2 sm:px-4",
                 isWelcomeMode
                   ? "bg-background/0 backdrop-blur-none"
                   : "bg-background/80 shadow-xs backdrop-blur",
@@ -366,8 +367,18 @@ export default function AgentChatPage() {
               </div>
             </header>
 
-            <main className="flex min-h-0 max-w-full grow flex-col">
-              <div className="flex min-h-0 flex-1 justify-center">
+            <main
+              className={cn(
+                "flex min-h-0 max-w-full grow flex-col",
+                isWelcomeMode && "overflow-y-auto overflow-x-hidden",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 justify-center",
+                  isWelcomeMode && "hidden",
+                )}
+              >
                 <MessageList
                   className={cn("size-full", !isWelcomeMode && "pt-10")}
                   testId="main-message-list"
@@ -407,14 +418,17 @@ export default function AgentChatPage() {
               <div
                 className={cn(
                   "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-                  isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+                  isWelcomeMode
+                    ? cn(
+                        "relative min-h-full shrink-0 py-8 sm:py-10",
+                        longWelcome ? "items-start" : "items-center",
+                      )
+                    : "relative shrink-0 pb-4",
                 )}
               >
                 <div
                   className={cn(
                     "relative w-full",
-                    isWelcomeMode &&
-                      "-translate-y-[calc(50vh-48px)] sm:-translate-y-[calc(50vh-96px)]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",
@@ -451,57 +465,51 @@ export default function AgentChatPage() {
                       className="bg-background/5 h-32 w-full -translate-y-2 rounded-2xl sm:-translate-y-4"
                     />
                   ) : (
-                    <InputBox
-                      className={cn(
-                        "bg-background/5 w-full",
-                        isWelcomeMode && "-translate-y-2 sm:-translate-y-4",
+                    <>
+                      {isWelcomeMode && !hasGoal && !hasTodos && (
+                        <AgentWelcome
+                          agent={effectiveAgent}
+                          agentName={agent_name}
+                          scope={avatarScope}
+                        />
                       )}
-                      isWelcomeMode={isWelcomeMode}
-                      threadId={threadId}
-                      draftThreadId={isNewThread ? "new" : threadId}
-                      draftAgentName={agent_name}
-                      initialValue={initialPrompt}
-                      defaultModelName={effectiveAgent?.model}
-                      welcomeSuggestions={welcomeSuggestions}
-                      autoFocus={isWelcomeMode}
-                      status={
-                        thread.error
-                          ? "error"
-                          : thread.isLoading
-                            ? "streaming"
-                            : "ready"
-                      }
-                      context={settings.context}
-                      extraHeader={
-                        isWelcomeMode &&
-                        !hasGoal &&
-                        !hasTodos && (
-                          <AgentWelcome
-                            agent={effectiveAgent}
-                            agentName={agent_name}
-                            scope={avatarScope}
-                          />
-                        )
-                      }
-                      disabled={
-                        env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
-                        isUploading ||
-                        (!isNewThread && isHistoryLoading)
-                      }
-                      onContextChange={(context) =>
-                        setSettings("context", context)
-                      }
-                      onGoalChange={setLocalGoal}
-                      onSubmit={handleSubmit}
-                      onStop={handleStop}
-                    />
+                      <InputBox
+                        className="bg-background/5 w-full"
+                        isWelcomeMode={isWelcomeMode}
+                        threadId={threadId}
+                        draftThreadId={isNewThread ? "new" : threadId}
+                        draftAgentName={agent_name}
+                        initialValue={initialPrompt}
+                        defaultModelName={effectiveAgent?.model}
+                        welcomeSuggestions={welcomeSuggestions}
+                        autoFocus={isWelcomeMode}
+                        status={
+                          thread.error
+                            ? "error"
+                            : thread.isLoading
+                              ? "streaming"
+                              : "ready"
+                        }
+                        context={settings.context}
+                        disabled={
+                          env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
+                          isUploading ||
+                          (!isNewThread && isHistoryLoading)
+                        }
+                        onContextChange={(context) =>
+                          setSettings("context", context)
+                        }
+                        onGoalChange={setLocalGoal}
+                        onSubmit={handleSubmit}
+                        onStop={handleStop}
+                      />
+                    </>
                   )}
                   {isWelcomeMode &&
                     !isCatalogPending &&
                     !hasGoal &&
                     !hasTodos && (
                       <LocalAgentGuideQuestions
-                        className="absolute top-full right-0 left-0"
                         questions={guideQuestions}
                         onSelect={textInput.setInput}
                       />

@@ -160,12 +160,13 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
 
   const isWelcomeMode = messages.length === 0;
   const displayName = agent.display_name ?? agent.name;
+  const longWelcome = (agent.guide_questions?.length ?? 0) > 4;
 
   return (
-    <main className="bg-background relative flex min-h-screen flex-col overflow-hidden">
+    <main className="bg-background relative flex h-dvh min-h-screen flex-col overflow-hidden">
       <header
         className={cn(
-          "absolute top-0 right-0 left-0 z-30 flex h-12 items-center gap-2 px-2 sm:px-4",
+          "relative z-30 flex h-12 shrink-0 items-center gap-2 px-2 sm:px-4",
           isWelcomeMode
             ? "bg-background/0"
             : "bg-background/80 shadow-xs backdrop-blur",
@@ -179,7 +180,12 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
         </div>
       </header>
 
-      <section className="flex min-h-0 flex-1 flex-col pt-12">
+      <section
+        className={cn(
+          "flex min-h-0 flex-1 flex-col",
+          isWelcomeMode && "overflow-y-auto overflow-x-hidden",
+        )}
+      >
         {!isWelcomeMode && (
           <div className="mx-auto flex min-h-0 w-full max-w-(--container-width-md) flex-1 flex-col overflow-y-auto px-4 pt-6 pb-8">
             <div className="space-y-5">
@@ -221,14 +227,17 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
         <div
           className={cn(
             "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-            isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+            isWelcomeMode
+              ? cn(
+                  "relative min-h-full shrink-0 py-8 sm:py-10",
+                  longWelcome ? "items-start" : "items-center",
+                )
+              : "relative shrink-0 pb-4",
           )}
         >
           <div
             className={cn(
               "relative w-full",
-              isWelcomeMode &&
-                "-translate-y-[calc(50vh-48px)] sm:-translate-y-[calc(50vh-96px)]",
               isWelcomeMode
                 ? "max-w-(--container-width-sm)"
                 : "max-w-(--container-width-md)",
@@ -236,7 +245,6 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
           >
             {isWelcomeMode && (
               <AgentWelcome
-                className="absolute right-0 bottom-full left-0"
                 agent={{
                   name: displayName,
                   description: agent.description,
@@ -285,7 +293,6 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
             </div>
             {isWelcomeMode && (
               <LocalAgentGuideQuestions
-                className="absolute top-full right-0 left-0"
                 questions={agent.guide_questions ?? []}
                 disabled={sending}
                 onSelect={setDraft}

@@ -436,7 +436,6 @@ export function LocalAgentCard({
           onOpenChange={setOverviewOpen}
           scope={scope}
           accent={colors.accent}
-          tint={colors.tint}
           categoryLabel={categoryLabel}
           capabilities={displayTags}
           onStartChat={handleOverviewChat}

@@ -40,17 +40,21 @@ export function AgentWelcome({
         "mx-auto flex w-full flex-col items-center justify-center gap-2 px-8 py-4 text-center",
         className,
       )}
-      >
-      <div className="bg-primary/10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full">
-        <AgentAvatar
-          name={agentName}
-          scope={avatarScope}
-          version={avatarVersion}
-          alt=""
-          className="size-full object-cover"
-        />
+    >
+      <div className="flex max-w-full items-center justify-center gap-3">
+        <div className="bg-primary/10 flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
+          <AgentAvatar
+            name={agentName}
+            scope={avatarScope}
+            version={avatarVersion}
+            alt=""
+            className="size-full object-cover"
+          />
+        </div>
+        <div className="min-w-0 truncate text-2xl font-bold">
+          {displayName}
+        </div>
       </div>
-      <div className="text-2xl font-bold">{displayName}</div>
       {description && (
         <p className="text-muted-foreground max-w-sm text-sm">{description}</p>
       )}

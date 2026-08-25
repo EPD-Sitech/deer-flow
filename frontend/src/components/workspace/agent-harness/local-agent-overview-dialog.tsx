@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightIcon, BotIcon, MessageSquareIcon } from "lucide-react";
+import { ArrowRightIcon, MessageSquareIcon } from "lucide-react";
 
 import {
   Dialog,
@@ -12,6 +12,7 @@ import {
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 
+import { AgentAvatar } from "./agent-avatar";
 import type { AgentScope, LocalAgentCatalogItem } from "./agent-management-api";
 
 interface LocalAgentOverviewDialogProps {
@@ -20,7 +21,6 @@ interface LocalAgentOverviewDialogProps {
   onOpenChange: (open: boolean) => void;
   scope: AgentScope;
   accent: string;
-  tint: string;
   categoryLabel: string;
   capabilities: string[];
   onStartChat: (prompt?: string) => void;
@@ -32,7 +32,6 @@ export function LocalAgentOverviewDialog({
   onOpenChange,
   scope,
   accent,
-  tint,
   categoryLabel,
   capabilities,
   onStartChat,
@@ -51,13 +50,12 @@ export function LocalAgentOverviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 overflow-hidden rounded-2xl border-[#d5e3ee] bg-white p-0 shadow-[0_30px_80px_rgba(12,38,61,0.25)] sm:top-[40%] sm:max-w-[700px] dark:border-slate-700 dark:bg-slate-950">
         <DialogHeader className="flex-row items-center gap-3 bg-[#eff6fb] px-6 py-5 pr-14 text-left dark:bg-slate-900">
-          <div
-            className="grid size-16 shrink-0 place-items-center rounded-full border-2 border-white shadow-sm dark:border-slate-700"
-            style={{ backgroundColor: tint, color: accent }}
-            aria-hidden="true"
-          >
-            <BotIcon className="size-7" />
-          </div>
+          <AgentAvatar
+            name={agent.name}
+            scope={scope}
+            alt=""
+            className="size-16 shrink-0 rounded-full border-2 border-white object-cover shadow-sm dark:border-slate-700"
+          />
           <div className="min-w-0">
             <DialogTitle className="truncate text-xl text-[#173a5b] dark:text-slate-100">
               {displayName}

@@ -24,7 +24,7 @@ export function LocalAgentGuideQuestions({
       <h2 className="text-muted-foreground mb-[9px] text-[10px] font-semibold">
         试试这样问
       </h2>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2">
         {questions.map((item) => (
           <button
             key={item.question}

@@ -11,12 +11,15 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from app.gateway.routers.agents import _require_agents_api_enabled
+from deerflow.config.app_config import get_app_config
 from deerflow.config.paths import get_paths
 from deerflow.models.factory import create_chat_model
 from deerflow.persistence.agents import get_agent_store
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id
 
 from .guide_questions import guide_questions_from_document, read_raw_config
+from .platform_db_store import PlatformDbAgentStore
+from .platform_metadata import get_platform_agent_display_names
 from .platform_store import PlatformAgentStore
 from .service import AgentNotFound
 from .sharing import AgentShareRegistry, ShareConflict
@@ -42,9 +45,11 @@ class PublicChatRequest(BaseModel):
 
 
 def _registry() -> AgentShareRegistry:
+    app_config = get_app_config()
+    agent_store = get_agent_store()
     return AgentShareRegistry(
-        store=get_agent_store(),
-        platform_store=PlatformAgentStore(get_paths()),
+        store=agent_store,
+        platform_store=(PlatformDbAgentStore(agent_store) if app_config.agent_storage.backend == "db" else PlatformAgentStore(get_paths())),
         state_file=get_paths().base_dir / "agent-management" / "public-agent-shares.json",
     )
 
@@ -120,14 +125,20 @@ async def get_public_agent(public_name: str) -> dict:
         )
     except (FileNotFoundError, ValueError):
         pass
+    runtime_name = resolved["runtime_name"]
+    owner_id = str(resolved.get("owner_id") or "")
+    display_name = get_platform_agent_display_names(owner_id, [runtime_name]).get(runtime_name)
+    if not display_name and resolved.get("scope") == "platform":
+        display_name = get_platform_agent_display_names("default", [runtime_name]).get(runtime_name)
     return {
         "name": config.name,
+        "display_name": display_name,
         "public_name": resolved["public_name"],
         "description": config.description,
         "tool_groups": config.tool_groups,
         "skills": config.skills,
         "guide_questions": guide_questions,
-        "runtime_name": resolved["runtime_name"],
+        "runtime_name": runtime_name,
     }
 
 

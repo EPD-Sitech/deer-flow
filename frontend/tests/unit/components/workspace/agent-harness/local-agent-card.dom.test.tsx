@@ -182,9 +182,10 @@ describe("LocalAgentCard management menu", () => {
     ).toBe("platform");
   });
 
-  it("uses the runtime alias to chat with a Chinese public Agent", async () => {
+  it("shows display names but uses the runtime alias to chat with a Chinese public Agent", async () => {
     renderCard({
-      name: "ai产品经理培训答疑",
+      name: "agent-0123456789abcdef",
+      display_name: "ai产品经理培训答疑",
       runtime_name: "agent-0123456789abcdef",
       description: "产品经理培训答疑",
       model: null,
@@ -206,6 +207,8 @@ describe("LocalAgentCard management menu", () => {
     expect(navigation.push).toHaveBeenCalledWith(
       "/workspace/agents/agent-0123456789abcdef/chats/new",
     );
+    expect(screen.getByText("ai产品经理培训答疑")).toBeTruthy();
+    expect(screen.queryByText("agent-0123456789abcdef")).toBeNull();
 
     expect(
       screen.queryByRole("button", {

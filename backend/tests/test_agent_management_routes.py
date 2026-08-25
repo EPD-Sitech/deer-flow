@@ -6,7 +6,15 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from app.gateway.agent_management import router as extension_router
-from app.gateway.agent_management.router import ScheduleConfig, _schedule_to_native, _service
+from app.gateway.agent_management.router import (
+    AgentDisplayNameUpdateRequest,
+    AgentSettingsUpdateRequest,
+    ScheduleConfig,
+    _schedule_to_native,
+    _service,
+    update_agent_display_name,
+    update_agent_settings,
+)
 from app.gateway.agent_management.sharing_router import _share_owner, _sharing_error
 from app.gateway.auth_middleware import _is_public
 from app.gateway.csrf_middleware import should_check_csrf
@@ -36,6 +44,7 @@ def test_local_agent_management_routes_are_incremental_and_exclude_other_catalog
         ("/api/agents/{name}/stats", "GET"),
         ("/api/agents/{name}/files", "GET"),
         ("/api/agents/{name}/files", "PUT"),
+        ("/api/agents/{name}/display-name", "PUT"),
         ("/api/agents/{name}/settings", "PUT"),
         ("/api/agents/{name}/export", "GET"),
         ("/api/agents/batch/export", "POST"),
@@ -121,3 +130,148 @@ def test_only_admins_can_share_their_custom_agents(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(sharing_router_module, "get_current_user", lambda: SimpleNamespace(system_role="admin"))
     monkeypatch.setattr(sharing_router_module, "get_effective_user_id", lambda: "admin-user")
     assert _share_owner("user") == "admin-user"
+
+
+@pytest.mark.asyncio
+async def test_update_platform_display_name_uses_public_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, str]] = []
+
+    class FakeService:
+        def describe(self, name: str) -> dict:
+            return {"name": name}
+
+    monkeypatch.setattr(router_module, "_service", lambda *_args, **_kwargs: FakeService())
+    monkeypatch.setattr(router_module, "get_effective_user_id", lambda: "admin-user")
+    monkeypatch.setattr(
+        router_module,
+        "get_public_platform_agent_owner",
+        lambda name: "default" if name == "agent-2776d1f2c2ef7f60" else None,
+    )
+
+    def fake_update(owner_id: str, name: str, display_name: str) -> bool:
+        calls.append((owner_id, name, display_name))
+        return True
+
+    monkeypatch.setattr(router_module, "update_platform_agent_display_name", fake_update)
+    result = await update_agent_display_name(
+        "agent-2776d1f2c2ef7f60",
+        AgentDisplayNameUpdateRequest(display_name=" 产品经理培训答疑 "),
+        scope="platform",
+    )
+
+    assert result == {
+        "name": "agent-2776d1f2c2ef7f60",
+        "display_name": "产品经理培训答疑",
+    }
+    assert calls == [("default", "agent-2776d1f2c2ef7f60", "产品经理培训答疑")]
+
+
+@pytest.mark.asyncio
+async def test_db_scope_change_moves_public_agent_to_custom_without_delete(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = "agent-c0b2dd0368250d86"
+    moves: list[dict] = []
+
+    class FakeStore:
+        def exists(self, requested_name: str, *, user_id: str | None = None) -> bool:
+            assert requested_name == name
+            assert user_id == "admin-user"
+            return False
+
+    class FakeService:
+        def __init__(self, scope: str) -> None:
+            self.scope = scope
+            self.store = SimpleNamespace(delete=lambda *_args, **_kwargs: pytest.fail("scope migration must not delete first"))
+
+        def describe(self, requested_name: str) -> dict:
+            assert requested_name == name
+            if self.scope == "platform":
+                return {
+                    "name": name,
+                    "display_name": "项目-团队流程引擎-t",
+                    "description": "企业级项目团队管理全能助手",
+                    "skills": ["large-credit-approval"],
+                    "soul": "# 项目-团队流程引擎-t SOUL",
+                }
+            return {
+                "name": name,
+                "description": "更新后的描述",
+                "skills": ["large-credit-approval"],
+                "soul": "# 项目-团队流程引擎-t SOUL",
+            }
+
+    fake_store = FakeStore()
+    monkeypatch.setattr(router_module, "get_current_user", lambda: SimpleNamespace(system_role="admin"))
+    monkeypatch.setattr(router_module, "get_effective_user_id", lambda: "admin-user")
+    monkeypatch.setattr(router_module, "get_agent_store", lambda: fake_store)
+    monkeypatch.setattr(router_module, "_agent_storage_backend", lambda: "db")
+    monkeypatch.setattr(router_module, "get_public_platform_agent_owner", lambda requested_name: "default")
+    monkeypatch.setattr(router_module, "_service", lambda scope="user", **_kwargs: FakeService(scope))
+
+    def fake_move(from_user_id: str, to_user_id: str, requested_name: str, **kwargs) -> bool:
+        moves.append(
+            {
+                "from_user_id": from_user_id,
+                "to_user_id": to_user_id,
+                "name": requested_name,
+                **kwargs,
+            }
+        )
+        return True
+
+    monkeypatch.setattr(router_module, "move_agent_scope_record", fake_move)
+
+    result = await update_agent_settings(
+        name,
+        AgentSettingsUpdateRequest(scope="user", description="更新后的描述"),
+        scope="platform",
+    )
+
+    assert result.name == name
+    assert result.description == "更新后的描述"
+    assert moves == [
+        {
+            "from_user_id": "default",
+            "to_user_id": "admin-user",
+            "name": name,
+            "visibility": "private",
+            "config": {
+                "name": name,
+                "display_name": "项目-团队流程引擎-t",
+                "description": "更新后的描述",
+                "skills": ["large-credit-approval"],
+            },
+            "soul": "# 项目-团队流程引擎-t SOUL",
+            "display_name": "项目-团队流程引擎-t",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_db_scope_change_reports_target_conflict_before_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = "agent-c0b2dd0368250d86"
+
+    class FakeStore:
+        def exists(self, requested_name: str, *, user_id: str | None = None) -> bool:
+            assert requested_name == name
+            assert user_id == "default"
+            return True
+
+    class FakeService:
+        def describe(self, requested_name: str) -> dict:
+            return {"name": requested_name, "description": "自定义智能体", "soul": "# 自定义智能体"}
+
+    monkeypatch.setattr(router_module, "get_current_user", lambda: SimpleNamespace(system_role="admin"))
+    monkeypatch.setattr(router_module, "get_effective_user_id", lambda: "admin-user")
+    monkeypatch.setattr(router_module, "get_agent_store", lambda: FakeStore())
+    monkeypatch.setattr(router_module, "_agent_storage_backend", lambda: "db")
+    monkeypatch.setattr(router_module, "_service", lambda *_args, **_kwargs: FakeService())
+    monkeypatch.setattr(router_module, "move_agent_scope_record", lambda *_args, **_kwargs: pytest.fail("conflict must be checked before move"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_agent_settings(
+            name,
+            AgentSettingsUpdateRequest(scope="platform"),
+            scope="user",
+        )
+
+    assert exc_info.value.status_code == 409

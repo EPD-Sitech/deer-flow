@@ -2069,8 +2069,13 @@ run_events:
 #                   'sqlite' or 'postgres' (rejected at startup on 'memory').
 #
 # Switching an existing install to 'db'? Import the on-disk agents once with:
-#     python backend/scripts/migrate_agents_to_db.py   # --dry-run to preview
+#     python backend/scripts/migrate_agents_to_platform_db.py   # --dry-run to preview
+# Chinese/human-facing names are stored in deerflow.platform_agents.display_name;
+# deerflow.agents.name remains the internal runtime key. In DB mode, changing an
+# Agent between public and custom updates its owner/visibility in one transaction.
 # The source files are left in place, so reverting to 'file' is a clean rollback.
+# The platform table is metadata-only: agent_id references deerflow.agents.id;
+# config, soul, user_id, and the runtime name remain in deerflow.agents.
 #
 # agent_storage:
 #   backend: file

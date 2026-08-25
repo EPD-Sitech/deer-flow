@@ -106,6 +106,7 @@ export function LocalAgentCard({
     "scope" in agent && agent.scope === "platform" ? "platform" : "user";
   const isPlatform = scope === "platform";
   const runtimeName = "runtime_name" in agent ? agent.runtime_name : agent.name;
+  const displayName = agent.display_name ?? agent.name;
   const [cloneName, setCloneName] = useState(`${runtimeName}-copy`);
   const canManage = !("can_manage" in agent) || agent.can_manage;
   const canViewDetails =
@@ -132,13 +133,13 @@ export function LocalAgentCard({
         local: "本地",
         more: "更多操作",
         fallback: "为复杂任务提供专业分析与执行支持。",
-        chatWith: `与 ${agent.name} 对话`,
+        chatWith: `与 ${displayName} 对话`,
       }
     : {
         local: "Local",
         more: "More actions",
         fallback: "Specialized analysis and execution for complex tasks.",
-        chatWith: `Chat with ${agent.name}`,
+        chatWith: `Chat with ${displayName}`,
       };
   const displayTags = useMemo(
     () =>
@@ -246,7 +247,7 @@ export function LocalAgentCard({
               type="checkbox"
               checked={selected}
               onChange={onToggleSelect}
-              aria-label={`${locale.startsWith("zh") ? "选择" : "Select"} ${agent.name}`}
+              aria-label={`${locale.startsWith("zh") ? "选择" : "Select"} ${displayName}`}
               className={`absolute top-3 right-10 z-10 size-4 cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
               onClick={(event) => event.stopPropagation()}
             />
@@ -257,7 +258,7 @@ export function LocalAgentCard({
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-[13px] leading-5 font-semibold text-[#173a5b] dark:text-slate-100">
-                {agent.name}
+                {displayName}
               </h2>
               <p className="mt-0.5 truncate text-[10px] text-[#8292a3] dark:text-slate-400">
                 {scopeLabel} · {categoryLabel}
@@ -304,7 +305,7 @@ export function LocalAgentCard({
                 <button
                   type="button"
                   className="absolute top-2.5 right-2.5 inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#7b91a5] transition-colors hover:bg-[#edf4fa] hover:text-[#356b96] dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                  aria-label={`${agent.name}: ${text.more}`}
+                  aria-label={`${displayName}: ${text.more}`}
                   title={text.more}
                   onClick={(event) => event.stopPropagation()}
                 >

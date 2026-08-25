@@ -45,6 +45,7 @@ export function LocalAgentOverviewDialog({
       : [];
   const scopeLabel =
     scope === "platform" ? (zh ? "公共" : "Public") : zh ? "自定义" : "Custom";
+  const displayName = agent.display_name ?? agent.name;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,7 +60,7 @@ export function LocalAgentOverviewDialog({
           </div>
           <div className="min-w-0">
             <DialogTitle className="truncate text-xl text-[#173a5b] dark:text-slate-100">
-              {agent.name}
+              {displayName}
             </DialogTitle>
             <DialogDescription className="mt-1 text-xs text-[#71869a] dark:text-slate-400">
               {categoryLabel} · {scopeLabel}

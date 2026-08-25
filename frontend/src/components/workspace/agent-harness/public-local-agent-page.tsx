@@ -14,6 +14,7 @@ import { LocalAgentGuideQuestions } from "./local-agent-guide-questions";
 
 interface PublicAgentInfo {
   name: string;
+  display_name?: string | null;
   public_name: string;
   description: string;
   tool_groups: string[] | null;
@@ -158,6 +159,7 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
   }
 
   const isWelcomeMode = messages.length === 0;
+  const displayName = agent.display_name ?? agent.name;
 
   return (
     <main className="bg-background relative flex min-h-screen flex-col overflow-hidden">
@@ -172,7 +174,7 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
         <div className="flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1">
           <BotIcon className="text-primary size-3.5" />
           <span className="max-w-64 truncate text-xs font-medium">
-            {agent.name}
+            {displayName}
           </span>
         </div>
       </header>
@@ -182,34 +184,34 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
           <div className="mx-auto flex min-h-0 w-full max-w-(--container-width-md) flex-1 flex-col overflow-y-auto px-4 pt-6 pb-8">
             <div className="space-y-5">
               {messages.map((item, index) => (
-              <div
-                key={`${item.role}-${index}`}
-                className={
-                  item.role === "user"
-                    ? "flex justify-end"
-                    : "flex justify-start"
-                }
-              >
                 <div
+                  key={`${item.role}-${index}`}
                   className={
                     item.role === "user"
-                      ? "bg-muted max-w-[85%] rounded-2xl px-4 py-2.5 text-sm"
-                      : "max-w-[90%] text-sm leading-7"
+                      ? "flex justify-end"
+                      : "flex justify-start"
                   }
                 >
-                  {item.role === "assistant" ? (
-                    item.content ? (
-                      <ClipboardSafeStreamdown>
-                        {item.content}
-                      </ClipboardSafeStreamdown>
+                  <div
+                    className={
+                      item.role === "user"
+                        ? "bg-muted max-w-[85%] rounded-2xl px-4 py-2.5 text-sm"
+                        : "max-w-[90%] text-sm leading-7"
+                    }
+                  >
+                    {item.role === "assistant" ? (
+                      item.content ? (
+                        <ClipboardSafeStreamdown>
+                          {item.content}
+                        </ClipboardSafeStreamdown>
+                      ) : (
+                        <Loader2Icon className="text-muted-foreground mt-1 size-4 animate-spin" />
+                      )
                     ) : (
-                      <Loader2Icon className="text-muted-foreground mt-1 size-4 animate-spin" />
-                    )
-                  ) : (
-                    item.content
-                  )}
+                      item.content
+                    )}
+                  </div>
                 </div>
-              </div>
               ))}
               <div ref={bottomRef} />
             </div>
@@ -236,7 +238,7 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
               <AgentWelcome
                 className="absolute right-0 bottom-full left-0"
                 agent={{
-                  name: agent.name,
+                  name: displayName,
                   description: agent.description,
                   model: null,
                   tool_groups: agent.tool_groups,

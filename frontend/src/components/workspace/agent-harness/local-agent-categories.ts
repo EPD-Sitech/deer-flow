@@ -117,6 +117,7 @@ const CATEGORY_KEYWORDS: Record<ConcreteCategoryId, string[]> = {
 
 function searchableAgentText(agent: Agent): string {
   return [
+    agent.display_name ?? "",
     agent.name,
     agent.description,
     agent.model ?? "",

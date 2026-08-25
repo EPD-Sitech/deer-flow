@@ -174,6 +174,20 @@ export function updateAgentFiles(
   );
 }
 
+export function updateAgentDisplayName(
+  name: string,
+  displayName: string,
+  scope: AgentScope = "user",
+) {
+  return jsonRequest<{ name: string; display_name: string }>(
+    withScope(`/api/agents/${encodeURIComponent(name)}/display-name`, scope),
+    {
+      ...jsonBody({ display_name: displayName }),
+      method: "PUT",
+    },
+  );
+}
+
 export function updateAgentSettings(
   name: string,
   settings: UpdateAgentRequest,

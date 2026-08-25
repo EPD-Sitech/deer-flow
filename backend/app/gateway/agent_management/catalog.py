@@ -11,12 +11,18 @@ from app.gateway.routers.agents import _require_agents_api_enabled
 from deerflow.config.paths import Paths, get_paths
 from deerflow.persistence.agents import get_agent_store, parse_agent_config
 from deerflow.persistence.agents.file import FileAgentStore
+from deerflow.persistence.agents.sql import SqlAgentStore
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id
 
 from .guide_questions import (
     guide_questions_from_document,
     read_raw_config,
     welcome_suggestions_from_document,
+)
+from .platform_metadata import (
+    get_platform_agent_display_names,
+    list_public_platform_agents,
+    merge_display_name,
 )
 from .platform_store import PlatformAgentStore
 
@@ -39,6 +45,8 @@ class AgentCatalogService:
         can_manage: bool,
         runtime_name: str | None = None,
         source_store: Any | None = None,
+        source_user_id: str | None = None,
+        display_name: str | None = None,
     ) -> dict[str, Any]:
         owns_agent = scope == "user"
         guide_questions: list[dict[str, str]] = []
@@ -47,30 +55,33 @@ class AgentCatalogService:
             raw_config = read_raw_config(
                 source_store or self.store,
                 config.name,
-                self.user_id,
+                source_user_id or self.user_id,
                 state_dir=self.paths.user_dir(self.user_id),
             )
             guide_questions = guide_questions_from_document(raw_config)
             welcome_suggestions = welcome_suggestions_from_document(raw_config)
         except (FileNotFoundError, ValueError):
             logger.warning("Failed to load guide questions for Agent '%s'", config.name, exc_info=True)
-        return {
-            **config.model_dump(exclude_none=True, exclude_unset=True),
-            "name": config.name,
-            "runtime_name": runtime_name or config.name,
-            "scope": scope,
-            "can_manage": can_manage,
-            "can_view_details": True,
-            "can_edit_guide_questions": self.can_manage_public,
-            "can_edit": can_manage,
-            "can_delete": can_manage,
-            "can_export": owns_agent or can_manage,
-            "can_clone": owns_agent or can_manage,
-            "can_share": self.can_manage_public,
-            "can_batch": can_manage,
-            "guide_questions": guide_questions,
-            "welcome_suggestions": welcome_suggestions,
-        }
+        return merge_display_name(
+            {
+                **config.model_dump(exclude_none=True, exclude_unset=True),
+                "name": config.name,
+                "runtime_name": runtime_name or config.name,
+                "scope": scope,
+                "can_manage": can_manage,
+                "can_view_details": True,
+                "can_edit_guide_questions": self.can_manage_public,
+                "can_edit": can_manage,
+                "can_delete": can_manage,
+                "can_export": owns_agent or can_manage,
+                "can_clone": owns_agent or can_manage,
+                "can_share": self.can_manage_public,
+                "can_batch": can_manage,
+                "guide_questions": guide_questions,
+                "welcome_suggestions": welcome_suggestions,
+            },
+            display_name,
+        )
 
     def _public_agents(self) -> list:
         root = self.paths.agents_dir
@@ -95,19 +106,71 @@ class AgentCatalogService:
         if isinstance(self.store, FileAgentStore):
             custom = [config for config in custom if (self.paths.user_agent_dir(self.user_id, config.name) / "config.yaml").is_file()]
         custom_names = {config.name for config in custom}
-        public = [config for config in self._public_agents() if config.name not in custom_names]
         platform_store = PlatformAgentStore(self.paths)
-        return [
-            *(self._item(config, scope="user", can_manage=True) for config in sorted(custom, key=lambda item: item.name)),
-            *(
+        custom_display_names = get_platform_agent_display_names(self.user_id, custom_names)
+
+        public_items: list[dict[str, Any]] = []
+        db_public_runtime_names: set[str] = set()
+        for metadata in list_public_platform_agents():
+            try:
+                config = self.store.get(metadata.deerflow_agent_name, user_id=metadata.user_id)
+            except (FileNotFoundError, ValueError):
+                logger.warning(
+                    "Skipping platform Agent '%s': missing DB agent row %s/%s",
+                    metadata.display_name,
+                    metadata.user_id,
+                    metadata.deerflow_agent_name,
+                    exc_info=True,
+                )
+                continue
+            db_public_runtime_names.add(metadata.deerflow_agent_name)
+            public_items.append(
                 self._item(
                     config,
                     scope="platform",
                     can_manage=self.can_manage_public,
-                    runtime_name=platform_store.ensure_runtime_alias(config.name),
-                    source_store=platform_store,
+                    runtime_name=metadata.deerflow_agent_name,
+                    source_user_id=metadata.user_id,
+                    display_name=metadata.display_name,
                 )
-                for config in sorted(public, key=lambda item: item.name)
+            )
+
+        file_public_items: list[dict[str, Any]] = []
+        if not isinstance(self.store, SqlAgentStore):
+            for config in self._public_agents():
+                if config.name in custom_names:
+                    continue
+                try:
+                    runtime_name = platform_store.ensure_runtime_alias(config.name)
+                except (FileNotFoundError, ValueError):
+                    logger.warning("Skipping public Agent '%s': runtime alias unavailable", config.name, exc_info=True)
+                    continue
+                if runtime_name in db_public_runtime_names:
+                    continue
+                file_public_items.append(
+                    self._item(
+                        config,
+                        scope="platform",
+                        can_manage=self.can_manage_public,
+                        runtime_name=runtime_name,
+                        source_store=platform_store,
+                        display_name=config.name,
+                    )
+                )
+
+        return [
+            *(
+                self._item(
+                    config,
+                    scope="user",
+                    can_manage=True,
+                    display_name=custom_display_names.get(config.name),
+                )
+                for config in sorted(custom, key=lambda item: custom_display_names.get(item.name) or item.name)
+            ),
+            *sorted(
+                [*public_items, *file_public_items],
+                key=lambda item: item.get("display_name") or item["name"],
             ),
         ]
 

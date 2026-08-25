@@ -46,6 +46,15 @@ from deerflow.scheduler.schedules import next_run_at, normalize_cron_expression,
 from deerflow.skills.storage import get_or_new_user_skill_storage
 
 from .names import runtime_agent_name
+from .platform_db_store import PlatformDbAgentStore
+from .platform_metadata import (
+    create_platform_agent_metadata,
+    get_agent_runtime_owner,
+    get_platform_agent_display_names,
+    get_public_platform_agent_owner,
+    move_agent_scope_record,
+    update_platform_agent_display_name,
+)
 from .platform_store import PlatformAgentStore
 from .service import AgentManagementService, AgentNotFound, InvalidAgentArchive, normalize_agent_name
 
@@ -56,13 +65,24 @@ router = APIRouter(prefix="/api", tags=["agent-management"])
 AgentScope = Literal["user", "platform"]
 
 
+def _platform_store() -> Any:
+    app_config = get_app_config()
+    if app_config.agent_storage.backend == "db":
+        return PlatformDbAgentStore(get_agent_store())
+    return PlatformAgentStore(get_paths())
+
+
+def _agent_storage_backend() -> str:
+    return get_app_config().agent_storage.backend
+
+
 def _service(scope: AgentScope = "user", *, require_platform_admin: bool = True) -> AgentManagementService:
     user_id = get_effective_user_id()
     is_admin = getattr(get_current_user(), "system_role", None) == "admin"
     if scope == "platform":
         if require_platform_admin and not is_admin:
             raise HTTPException(status_code=403, detail="Only administrators can modify public Agents")
-        store = PlatformAgentStore(get_paths())
+        store = _platform_store()
     else:
         store = get_agent_store()
     return AgentManagementService(
@@ -71,6 +91,64 @@ def _service(scope: AgentScope = "user", *, require_platform_admin: bool = True)
         state_dir=get_paths().user_dir(user_id),
         can_edit_guide_questions=is_admin,
     )
+
+
+def _apply_settings_updates(
+    source_data: dict[str, Any],
+    updates: dict[str, Any],
+    *,
+    name: str,
+    welcome_suggestions: list[dict[str, str]] | None,
+    welcome_suggestions_set: bool,
+) -> tuple[dict[str, Any], str]:
+    config = {key: value for key, value in source_data.items() if key != "soul"}
+    config.update(updates)
+    if welcome_suggestions_set:
+        ui = dict(config.get("ui") or {})
+        if welcome_suggestions is None:
+            ui.pop("welcome_suggestions", None)
+        else:
+            ui["welcome_suggestions"] = welcome_suggestions
+        if ui:
+            config["ui"] = ui
+        else:
+            config.pop("ui", None)
+    config["name"] = name
+    return config, source_data.get("soul") or ""
+
+
+def _move_db_agent_scope(
+    name: str,
+    *,
+    source_scope: AgentScope,
+    target_scope: AgentScope,
+    source_data: dict[str, Any],
+    config: dict[str, Any],
+    soul: str,
+) -> None:
+    current_user_id = get_effective_user_id()
+    source_owner = get_public_platform_agent_owner(name) or "default" if source_scope == "platform" else current_user_id
+    target_owner = "default" if target_scope == "platform" else current_user_id
+    target_visibility = "public" if target_scope == "platform" else "private"
+    display_name = get_platform_agent_display_names(source_owner, [name]).get(name)
+
+    if source_owner != target_owner and get_agent_store().exists(name, user_id=target_owner):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent '{name}' already exists in the target scope",
+        )
+
+    moved = move_agent_scope_record(
+        source_owner,
+        target_owner,
+        name,
+        visibility=target_visibility,
+        config=config,
+        soul=soul,
+        display_name=display_name or source_data.get("display_name"),
+    )
+    if not moved:
+        raise AgentNotFound(f"Agent '{name}' not found")
 
 
 def _agent_response(data: dict[str, Any]) -> AgentResponse:
@@ -141,6 +219,10 @@ class AgentFilesUpdateRequest(BaseModel):
     soul: str | None = None
     guide_questions: list[dict[str, str]] | None = None
     welcome_suggestions: list[dict[str, str]] | None = None
+
+
+class AgentDisplayNameUpdateRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=128)
 
 
 class AgentCloneRequest(BaseModel):
@@ -386,6 +468,49 @@ async def update_agent_files(name: str, body: AgentFilesUpdateRequest, scope: Ag
         raise _http_error(exc) from exc
 
 
+@router.put("/agents/{name}/display-name")
+async def update_agent_display_name(
+    name: str,
+    body: AgentDisplayNameUpdateRequest,
+    scope: AgentScope = "user",
+) -> dict[str, str]:
+    _require_agents_api_enabled()
+    display_name = body.display_name.strip()
+    if not display_name:
+        raise HTTPException(status_code=422, detail="Display name cannot be empty")
+    try:
+        normalized = normalize_agent_name(name)
+        owner_id = get_effective_user_id()
+        if scope == "platform":
+            owner_id = get_public_platform_agent_owner(normalized) or get_agent_runtime_owner(normalized) or "default"
+        try:
+            await asyncio.to_thread(_service(scope).describe, normalized)
+        except AgentNotFound:
+            if _agent_storage_backend() != "db":
+                raise
+            runtime_store = get_agent_store()
+            await asyncio.to_thread(runtime_store.get, normalized, user_id=owner_id)
+        updated = await asyncio.to_thread(
+            update_platform_agent_display_name,
+            owner_id,
+            normalized,
+            display_name,
+        )
+        if not updated:
+            if _agent_storage_backend() != "db":
+                raise AgentNotFound(f"Platform metadata for Agent '{normalized}' not found")
+            await asyncio.to_thread(
+                create_platform_agent_metadata,
+                owner_id,
+                normalized,
+                display_name,
+                visibility="public" if scope == "platform" else "private",
+            )
+        return {"name": normalized, "display_name": display_name}
+    except Exception as exc:
+        raise _http_error(exc) from exc
+
+
 @router.put("/agents/{name}/settings")
 async def update_agent_settings(
     name: str,
@@ -398,11 +523,7 @@ async def update_agent_settings(
         _validate_model_exists(body.model)
     target_scope: AgentScope = body.scope or scope
     welcome_suggestions_set = "welcome_suggestions" in body.model_fields_set
-    welcome_suggestions = (
-        [item.model_dump() for item in body.welcome_suggestions]
-        if body.welcome_suggestions is not None
-        else None
-    )
+    welcome_suggestions = [item.model_dump() for item in body.welcome_suggestions] if body.welcome_suggestions is not None else None
     updates = body.model_dump(exclude_unset=True)
     updates.pop("scope", None)
     updates.pop("welcome_suggestions", None)
@@ -413,58 +534,46 @@ async def update_agent_settings(
 
             source_service = _service(scope, require_platform_admin=False)
             source_data = await asyncio.to_thread(source_service.describe, name)
-            paths = get_paths()
-            target_dir = (
-                paths.agent_dir(name)
-                if target_scope == "platform"
-                else paths.user_agent_dir(get_effective_user_id(), name)
+            config, soul = _apply_settings_updates(
+                source_data,
+                updates,
+                name=name,
+                welcome_suggestions=welcome_suggestions,
+                welcome_suggestions_set=welcome_suggestions_set,
             )
-            if target_dir.exists():
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Agent '{name}' already exists in the target scope",
+            if _agent_storage_backend() == "db":
+                await asyncio.to_thread(
+                    _move_db_agent_scope,
+                    name,
+                    source_scope=scope,
+                    target_scope=target_scope,
+                    source_data=source_data,
+                    config=config,
+                    soul=soul,
                 )
+            else:
+                paths = get_paths()
+                target_dir = paths.agent_dir(name) if target_scope == "platform" else paths.user_agent_dir(get_effective_user_id(), name)
+                if target_dir.exists():
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Agent '{name}' already exists in the target scope",
+                    )
 
-            target_store = (
-                PlatformAgentStore(paths)
-                if target_scope == "platform"
-                else get_agent_store()
-            )
-            config = {
-                key: value
-                for key, value in source_data.items()
-                if key != "soul"
-            }
-            config.update(updates)
-            if welcome_suggestions_set:
-                ui = dict(config.get("ui") or {})
-                if welcome_suggestions is None:
-                    ui.pop("welcome_suggestions", None)
-                else:
-                    ui["welcome_suggestions"] = welcome_suggestions
-                if ui:
-                    config["ui"] = ui
-                else:
-                    config.pop("ui", None)
-            config["name"] = name
-            soul = source_data.get("soul") or ""
-            target_write = (
-                target_store.create
-                if target_scope == "platform"
-                else target_store.update
-            )
-            await asyncio.to_thread(
-                target_write,
-                name,
-                config,
-                soul,
-                user_id=get_effective_user_id(),
-            )
-            await asyncio.to_thread(
-                _service(scope, require_platform_admin=False).store.delete,
-                name,
-                user_id=get_effective_user_id(),
-            )
+                target_store = _platform_store() if target_scope == "platform" else get_agent_store()
+                target_write = target_store.create if target_scope == "platform" else target_store.update
+                await asyncio.to_thread(
+                    target_write,
+                    name,
+                    config,
+                    soul,
+                    user_id=get_effective_user_id(),
+                )
+                await asyncio.to_thread(
+                    _service(scope, require_platform_admin=False).store.delete,
+                    name,
+                    user_id=get_effective_user_id(),
+                )
             data = await asyncio.to_thread(
                 _service(target_scope, require_platform_admin=False).describe,
                 name,

@@ -758,10 +758,17 @@ class WechatChannel(Channel):
         )
 
         deadline = time.monotonic() + max(self._qrcode_poll_timeout, 1.0)
+        # The iLink get_qrcode_status endpoint is a server-side long-poll: it holds
+        # the HTTP response open until the QR is scanned/confirmed (up to the QR
+        # bootstrap timeout). The default 10s config timeout would terminate every
+        # poll before the scan can complete, so pin the read timeout to the QR
+        # bootstrap window (plus a little slack).
+        status_timeout = max(self._qrcode_poll_timeout + 10.0, 1.0)
         while time.monotonic() < deadline:
             status_data = await self._request_public_get_json(
                 "/ilink/bot/get_qrcode_status",
                 params={"qrcode": qrcode},
+                timeout=status_timeout,
             )
             status = str(status_data.get("status") or "").strip().lower()
             if status == "confirmed":

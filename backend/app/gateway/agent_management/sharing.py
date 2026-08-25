@@ -101,6 +101,16 @@ class AgentShareRegistry:
             self.platform_store.create(published_name, raw_config, soul)
         return self.platform_store.ensure_runtime_alias(published_name)
 
+    def _platform_runtime_name(self, name: str) -> str:
+        if self.platform_store is None:
+            raise AgentNotFound(f"Agent '{name}' not found")
+        aliaser = getattr(self.platform_store, "ensure_runtime_alias", None)
+        if aliaser is not None:
+            return aliaser(name)
+        if not self.platform_store.exists(name, user_id="default"):
+            raise AgentNotFound(f"Agent '{name}' not found")
+        return name
+
     def _unpublish_user_agent(self, entry: dict[str, Any] | None) -> None:
         if not entry or not entry.get("published_by_share") or self.platform_store is None:
             return
@@ -171,6 +181,11 @@ class AgentShareRegistry:
                         entry_scope,
                     )
                 except (AgentNotFound, ValueError):
+                    # Keep the registry record. A temporary runtime/catalog
+                    # mismatch must not silently destroy a user's public-link
+                    # alias; resolution can retry after the backing store is
+                    # repaired. ``resolve`` already skips stale entries.
+                    retained.append(entry)
                     continue
                 if enabled and entry.get("enabled"):
                     other_keys = {
@@ -198,9 +213,7 @@ class AgentShareRegistry:
                 published_by_share = True
                 published_agent_name = normalized
             elif enabled and scope == "platform":
-                if self.platform_store is None:
-                    raise AgentNotFound(f"Agent '{normalized}' not found")
-                runtime_name = self.platform_store.ensure_runtime_alias(normalized)
+                runtime_name = self._platform_runtime_name(normalized)
             elif scope == "user":
                 self._unpublish_user_agent(previous_entry)
 
@@ -286,8 +299,8 @@ class AgentShareRegistry:
                         runtime_name = agent_name
                 elif self.platform_store is not None:
                     try:
-                        runtime_name = self.platform_store.ensure_runtime_alias(agent_name)
-                    except (FileNotFoundError, ValueError):
+                        runtime_name = self._platform_runtime_name(agent_name)
+                    except (AgentNotFound, FileNotFoundError, ValueError):
                         continue
                 return {
                     "config": config,

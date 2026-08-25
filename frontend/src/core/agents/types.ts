@@ -28,6 +28,7 @@ export interface AgentWelcomeSuggestion {
 
 export interface Agent {
   name: string;
+  display_name?: string | null;
   description: string;
   model: string | null;
   tool_groups: string[] | null;

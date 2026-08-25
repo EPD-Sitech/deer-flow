@@ -83,6 +83,7 @@ export function LocalAgentGallery() {
       if (!localAgentMatchesCategory(agent, categoryFilter)) return false;
       if (!query) return true;
       return [
+        agent.display_name ?? "",
         agent.name,
         agent.description,
         agent.model ?? "",

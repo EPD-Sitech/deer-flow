@@ -29,6 +29,7 @@ COMPOSE_PATHS = {
 }
 
 EXPECTED_NGINX_PORT_MAPPING = "${BIND_HOST:-127.0.0.1}:${PORT:-2026}:2026"
+EXPECTED_POSTGRES_PORT_MAPPING = "${BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
 
 
 def _published_ports(compose_path: Path) -> dict[str, list[str]]:
@@ -78,6 +79,13 @@ def test_bind_address_remains_overridable(variant: str):
     mapping = _published_ports(COMPOSE_PATHS[variant])["nginx"][0]
 
     assert _bind_address(mapping) == "${BIND_HOST:-127.0.0.1}", f"{variant} compose must keep the bind address overridable via BIND_HOST; got: {mapping!r}"
+
+
+def test_postgres_defaults_to_loopback_when_published():
+    """The production database must not expose its fixed local credentials."""
+    published = _published_ports(COMPOSE_PATHS["prod"])
+
+    assert published.get("postgres") == [EXPECTED_POSTGRES_PORT_MAPPING]
 
 
 def _bind_address(mapping: str) -> str | None:

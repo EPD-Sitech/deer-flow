@@ -30,10 +30,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type {
-  Agent,
-  AgentWelcomeSuggestion,
-} from "@/core/agents";
+import type { Agent, AgentWelcomeSuggestion } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 
 import {
@@ -41,6 +38,7 @@ import {
   getAgentFiles,
   getAgentMemory,
   importSubAgentPackage,
+  updateAgentDisplayName,
   updateAgentFiles,
   updateAgentMemory,
   type AgentFiles,
@@ -83,6 +81,11 @@ export function LocalAgentDetailDialog({
   const { locale } = useI18n();
   const queryClient = useQueryClient();
   const zh = locale.startsWith("zh");
+  const initialDisplayName = agent.display_name ?? agent.name;
+  const [displayNameValue, setDisplayNameValue] = useState(initialDisplayName);
+  const [displayNameDraft, setDisplayNameDraft] = useState(initialDisplayName);
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
+  const displayName = displayNameValue ?? agent.display_name ?? agent.name;
   const [tab, setTab] = useState<DetailTab>(initialTab);
   const [files, setFiles] = useState<AgentFiles | null>(null);
   const [configYaml, setConfigYaml] = useState("");
@@ -133,9 +136,11 @@ export function LocalAgentDetailDialog({
   useEffect(() => {
     if (!open) return;
     setTab(initialTab);
+    setDisplayNameValue(agent.display_name ?? agent.name);
+    setDisplayNameDraft(agent.display_name ?? agent.name);
     setMemoryLoaded(false);
     void loadFiles();
-  }, [initialTab, loadFiles, open]);
+  }, [agent.display_name, agent.name, initialTab, loadFiles, open]);
 
   useEffect(() => {
     if (!open || tab !== "memory" || memoryLoaded) return;
@@ -186,6 +191,27 @@ export function LocalAgentDetailDialog({
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setSavingFiles(false);
+    }
+  }
+
+  async function handleSaveDisplayName() {
+    const nextName = displayNameDraft.trim();
+    if (!nextName) {
+      toast.error(zh ? "显示名称不能为空" : "Display name cannot be empty");
+      return;
+    }
+    setSavingDisplayName(true);
+    try {
+      const result = await updateAgentDisplayName(agent.name, nextName, scope);
+      setDisplayNameValue(result.display_name);
+      setDisplayNameDraft(result.display_name);
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+      await queryClient.invalidateQueries({ queryKey: ["agents", "catalog"] });
+      toast.success(zh ? "显示名称已保存" : "Display name saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingDisplayName(false);
     }
   }
 
@@ -272,7 +298,7 @@ export function LocalAgentDetailDialog({
           <div className="flex min-w-0 items-center gap-3">
             <div className="min-w-0 flex-1">
               <DialogTitle className="truncate">
-                {zh ? "智能体详情" : "Agent details"}: {agent.name}
+                {zh ? "智能体详情" : "Agent details"}: {displayName}
               </DialogTitle>
               <DialogDescription className="mt-1 truncate">
                 {agent.description ||
@@ -288,18 +314,18 @@ export function LocalAgentDetailDialog({
             {!readOnly &&
               (tab === "files" || tab === "guideQuestions") &&
               filesDirty && (
-              <Button
-                onClick={() => void handleSaveFiles()}
-                disabled={savingFiles}
-              >
-                {savingFiles ? (
-                  <Loader2Icon className="size-4 animate-spin" />
-                ) : (
-                  <SaveIcon className="size-4" />
-                )}
-                {zh ? "保存" : "Save"}
-              </Button>
-            )}
+                <Button
+                  onClick={() => void handleSaveFiles()}
+                  disabled={savingFiles}
+                >
+                  {savingFiles ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    <SaveIcon className="size-4" />
+                  )}
+                  {zh ? "保存" : "Save"}
+                </Button>
+              )}
           </div>
         </DialogHeader>
 
@@ -329,37 +355,76 @@ export function LocalAgentDetailDialog({
                 {filesLoading || !files ? (
                   <LoadingState />
                 ) : (
-                  <div className="grid gap-5 lg:grid-cols-2">
-                    <EditorField
-                      id="agent-config-yaml"
-                      label="config.yaml"
-                      description={
-                        zh
-                          ? "完整智能体配置，name 必须与当前智能体一致。"
-                          : "Full agent configuration. The name must match this agent."
-                      }
-                      value={configYaml}
-                      readOnly={readOnly}
-                      onChange={(value) => {
-                        setConfigYaml(value);
-                        setFilesDirty(true);
-                      }}
-                    />
-                    <EditorField
-                      id="agent-soul"
-                      label="SOUL.md"
-                      description={
-                        zh
-                          ? "智能体的角色、行为边界和工作方式。"
-                          : "The agent's role, behavior, and working style."
-                      }
-                      value={soul}
-                      readOnly={readOnly}
-                      onChange={(value) => {
-                        setSoul(value);
-                        setFilesDirty(true);
-                      }}
-                    />
+                  <div className="space-y-5">
+                    {!readOnly && (
+                      <div className="rounded-lg border p-4">
+                        <SectionHeading
+                          title={zh ? "显示名称" : "Display name"}
+                          description={
+                            zh
+                              ? "只影响平台页面展示，不改变运行时 agent-* 名称。"
+                              : "Only changes the platform label. The runtime agent-* name is unchanged."
+                          }
+                        />
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                          <Input
+                            value={displayNameDraft}
+                            maxLength={128}
+                            onChange={(event) =>
+                              setDisplayNameDraft(event.target.value)
+                            }
+                          />
+                          <Button
+                            className="shrink-0"
+                            onClick={() => void handleSaveDisplayName()}
+                            disabled={
+                              savingDisplayName ||
+                              !displayNameDraft.trim() ||
+                              displayNameDraft.trim() === displayNameValue
+                            }
+                          >
+                            {savingDisplayName ? (
+                              <Loader2Icon className="size-4 animate-spin" />
+                            ) : (
+                              <SaveIcon className="size-4" />
+                            )}
+                            {zh ? "保存名称" : "Save name"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      <EditorField
+                        id="agent-config-yaml"
+                        label="config.yaml"
+                        description={
+                          zh
+                            ? "完整智能体配置，name 必须与当前智能体一致。"
+                            : "Full agent configuration. The name must match this agent."
+                        }
+                        value={configYaml}
+                        readOnly={readOnly}
+                        onChange={(value) => {
+                          setConfigYaml(value);
+                          setFilesDirty(true);
+                        }}
+                      />
+                      <EditorField
+                        id="agent-soul"
+                        label="SOUL.md"
+                        description={
+                          zh
+                            ? "智能体的角色、行为边界和工作方式。"
+                            : "The agent's role, behavior, and working style."
+                        }
+                        value={soul}
+                        readOnly={readOnly}
+                        onChange={(value) => {
+                          setSoul(value);
+                          setFilesDirty(true);
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </TabsContent>
@@ -545,7 +610,8 @@ export function LocalAgentDetailDialog({
                     readOnly={readOnly || !canEditGuideQuestions}
                     onChange={(next) => {
                       setWelcomeSuggestions(next);
-                      if (canEditGuideQuestions && !readOnly) setFilesDirty(true);
+                      if (canEditGuideQuestions && !readOnly)
+                        setFilesDirty(true);
                     }}
                   />
                 </div>
@@ -713,10 +779,9 @@ function EditorField({
         value={value}
         readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
-        className={`min-h-[470px] font-mono text-xs leading-5 ${readOnly ? "resize-none bg-muted/20" : "resize-y"}`}
+        className={`min-h-[470px] font-mono text-xs leading-5 ${readOnly ? "bg-muted/20 resize-none" : "resize-y"}`}
         spellCheck={false}
       />
     </div>
   );
 }
-

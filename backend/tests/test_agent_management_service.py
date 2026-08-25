@@ -3,16 +3,19 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
+from app.gateway.agent_management import catalog as catalog_module
 from app.gateway.agent_management.catalog import AgentCatalogService
 from app.gateway.agent_management.names import (
     NATIVE_AGENT_NAME_PATTERN,
     normalize_migrated_agent_name,
     runtime_agent_name,
 )
+from app.gateway.agent_management.platform_db_store import PlatformDbAgentStore
 from app.gateway.agent_management.platform_store import PlatformAgentStore
 from app.gateway.agent_management.service import AgentManagementService, InvalidAgentArchive
 from app.gateway.agent_management.sharing import AgentShareRegistry, ShareConflict
@@ -437,6 +440,99 @@ def test_catalog_separates_public_and_custom_local_agents(service: AgentManageme
     assert admin_catalog[1]["can_share"] is True
     assert admin_catalog[1]["can_batch"] is True
     assert admin_catalog[0]["can_share"] is True
+
+
+def test_catalog_uses_platform_agent_display_names(
+    service: AgentManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = Paths(tmp_path)
+    monkeypatch.setattr(
+        catalog_module,
+        "get_platform_agent_display_names",
+        lambda user_id, names: {"writer": "报告写作专家"} if user_id == "alice" and "writer" in names else {},
+    )
+    monkeypatch.setattr(catalog_module, "list_public_platform_agents", lambda: [])
+
+    catalog = AgentCatalogService(
+        store=service.store,
+        user_id="alice",
+        paths=paths,
+        can_manage_public=False,
+    ).list_agents()
+
+    assert catalog[0]["name"] == "writer"
+    assert catalog[0]["display_name"] == "报告写作专家"
+
+
+def test_catalog_reads_public_agents_from_platform_table(
+    service: AgentManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = Paths(tmp_path)
+    service.store.create(
+        "agent-15562e852915f2f4",
+        {"name": "agent-15562e852915f2f4", "description": "公众号运营智能体"},
+        "# 公众号运营智能体",
+        user_id="default",
+    )
+    monkeypatch.setattr(catalog_module, "get_platform_agent_display_names", lambda _user_id, _names: {})
+    monkeypatch.setattr(
+        catalog_module,
+        "list_public_platform_agents",
+        lambda: [
+            SimpleNamespace(
+                user_id="default",
+                deerflow_agent_name="agent-15562e852915f2f4",
+                display_name="公众号运营智能体",
+            )
+        ],
+    )
+
+    catalog = AgentCatalogService(
+        store=service.store,
+        user_id="alice",
+        paths=paths,
+        can_manage_public=True,
+    ).list_agents()
+    public_item = next(item for item in catalog if item["runtime_name"] == "agent-15562e852915f2f4")
+
+    assert public_item["scope"] == "platform"
+    assert public_item["name"] == "agent-15562e852915f2f4"
+    assert public_item["display_name"] == "公众号运营智能体"
+    assert public_item["can_manage"] is True
+    assert public_item["can_edit"] is True
+    assert public_item["can_delete"] is True
+
+
+def test_platform_db_store_resolves_public_agent_owner(
+    service: AgentManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service.store.create(
+        "agent-2776d1f2c2ef7f60",
+        {"name": "agent-2776d1f2c2ef7f60", "description": "产品经理培训答疑"},
+        "# 产品经理培训答疑",
+        user_id="default",
+    )
+    monkeypatch.setattr(
+        "app.gateway.agent_management.platform_db_store.get_public_platform_agent_owner",
+        lambda name: "default" if name == "agent-2776d1f2c2ef7f60" else None,
+    )
+    platform_service = AgentManagementService(
+        store=PlatformDbAgentStore(service.store),
+        user_id="admin-user",
+        state_dir=tmp_path / "admin-user",
+    )
+
+    details = platform_service.describe("agent-2776d1f2c2ef7f60")
+
+    assert details["name"] == "agent-2776d1f2c2ef7f60"
+    assert details["description"] == "产品经理培训答疑"
+    assert details["soul"] == "# 产品经理培训答疑"
 
 
 @pytest.mark.parametrize("name", ["bad/name", "bad name", "bad.name", "bad_name", "../agent"])

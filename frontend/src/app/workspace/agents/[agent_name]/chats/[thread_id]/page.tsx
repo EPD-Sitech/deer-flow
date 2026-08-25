@@ -91,6 +91,9 @@ export default function AgentChatPage() {
   );
   const guideQuestions = catalogAgent?.guide_questions ?? [];
   const welcomeSuggestions = catalogAgent?.welcome_suggestions;
+  const effectiveAgent = catalogAgent ?? agent;
+  const agentDisplayName =
+    effectiveAgent?.display_name ?? effectiveAgent?.name ?? agent_name;
 
   const { threadId, setThreadId, isNewThread, setIsNewThread, isMock } =
     useThreadChat();
@@ -253,8 +256,9 @@ export default function AgentChatPage() {
     : "off";
   const hasTodos = (thread.values.todos?.length ?? 0) > 0;
   const agentBrowserEnabled =
-    agent !== null &&
-    (agent.tool_groups == null || agent.tool_groups.includes("browser"));
+    effectiveAgent !== null &&
+    (effectiveAgent?.tool_groups == null ||
+      effectiveAgent.tool_groups.includes("browser"));
   const browserEnabled =
     !isNewThread && !isMock && browserControlEnabled && agentBrowserEnabled;
   const { activeGoal, hasGoal, setLocalGoal } = useActiveGoal(
@@ -292,7 +296,7 @@ export default function AgentChatPage() {
               <div className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1">
                 <BotIcon className="text-primary h-3.5 w-3.5" />
                 <span className="hidden max-w-24 truncate text-xs font-medium sm:inline sm:max-w-none">
-                  {agent?.name ?? agent_name}
+                  {agentDisplayName}
                 </span>
               </div>
 
@@ -431,7 +435,7 @@ export default function AgentChatPage() {
                       draftThreadId={isNewThread ? "new" : threadId}
                       draftAgentName={agent_name}
                       initialValue={initialPrompt}
-                      defaultModelName={agent?.model}
+                      defaultModelName={effectiveAgent?.model}
                       welcomeSuggestions={welcomeSuggestions}
                       autoFocus={isWelcomeMode}
                       status={
@@ -446,7 +450,10 @@ export default function AgentChatPage() {
                         isWelcomeMode &&
                         !hasGoal &&
                         !hasTodos && (
-                          <AgentWelcome agent={agent} agentName={agent_name} />
+                          <AgentWelcome
+                            agent={effectiveAgent}
+                            agentName={agent_name}
+                          />
                         )
                       }
                       disabled={

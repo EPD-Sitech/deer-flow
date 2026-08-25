@@ -904,6 +904,16 @@ Focused regression coverage for the updater lives in `backend/tests/test_memory_
 
 ### Schema Migrations (`packages/harness/deerflow/persistence/migrations/`)
 
+DB-backed custom Agent definitions use `deerflow.agents` as the runtime source of
+truth. The platform catalog is an app-layer metadata table:
+`deerflow.platform_agents.agent_id` references `deerflow.agents.id` with
+`ON DELETE CASCADE`; `platform_agents` must not duplicate runtime ownership,
+`name`, `config`, or `soul`. Chinese and other human-facing names are read from
+`platform_agents.display_name`. Existing file-backed installations are converted
+with `scripts/migrate_platform_agents_schema.py` before
+`scripts/migrate_agents_to_platform_db.py`; the schema script retains the legacy
+table as `platform_agents_legacy` during composite-key conversion.
+
 DeerFlow's application tables (`runs`, `threads_meta`, `feedback`, `users`, `run_events`, `operation_events`, `operation_inventory_snapshots`, plus the four `channel_*` tables) are owned by alembic via a **hybrid bootstrap** strategy. LangGraph's checkpointer tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`) live in the same database but are owned by LangGraph and excluded from alembic's view via `migrations/_env_filters.py::include_object`.
 
 **Convention**: every ORM model change (new column, new table, new index) MUST ship as an alembic revision under `migrations/versions/`. The Gateway runs `alembic upgrade head` automatically on startup; users do not run `alembic` manually in production.

@@ -791,6 +791,21 @@ DeerFlow 2.0 is no longer a framework you wire together. It's a super agent harn
 
 Workspace administrators manage both public and custom Agents through the same settings dialog. Agent actions include sharing, editing, scheduling, cloning, exporting, settings, and deletion; model behavior, skills, MCP servers, versions, validation, testing, and activity stay scoped to the selected Agent's public or user-owned storage.
 
+When DB-backed Agent storage is enabled, the runnable key remains an internal
+ASCII name in `deerflow.agents.name`, while the Chinese or human-facing name is
+read from `deerflow.platform_agents.display_name`. Switching an Agent between
+public and custom scope updates the database ownership and visibility in one
+transaction, so it does not require deleting and recreating the Agent.
+
+The `deerflow.platform_agents` table is metadata-only. Its runtime relationship is
+`agent_id -> deerflow.agents.id`; it stores `display_name`, `visibility`, `status`,
+`avatar_url`, `tags`, `metadata`, publication timestamps, and audit timestamps.
+It does not duplicate `user_id`, `name`, `config`, `soul`, `description`, or
+`category`. For an existing installation, run
+`backend/scripts/migrate_platform_agents_schema.py` before rerunning the agent
+import script. The migration keeps the old table as
+`deerflow.platform_agents_legacy` when converting the legacy composite-key schema.
+
 Use it as-is. Or tear it apart and make it yours.
 
 ## Core Features

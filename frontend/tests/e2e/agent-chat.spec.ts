@@ -91,6 +91,46 @@ test.describe("Agent chat", () => {
     expect(runRequestCount).toBe(0);
   });
 
+  test("long guide question lists remain scrollable", async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 600 });
+    mockLangGraphAPI(page, { agents: MOCK_AGENTS });
+    const guideQuestions = Array.from({ length: 8 }, (_, index) => ({
+      question: `引导问题 ${index + 1}`,
+      prompt: `问题内容 ${index + 1}`,
+    }));
+    await page.route("**/api/agent-management/catalog", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          agents: [
+            {
+              name: "test-agent",
+              runtime_name: "test-agent",
+              scope: "user",
+              guide_questions: guideQuestions,
+            },
+          ],
+        }),
+      }),
+    );
+
+    await page.goto("/workspace/agents/test-agent/chats/new");
+    const welcomeMain = page.locator("main");
+    await expect(page.getByRole("button", { name: "引导问题 1" })).toBeVisible();
+    await expect
+      .poll(() =>
+        welcomeMain.evaluate(
+          (element) => element.scrollHeight > element.clientHeight,
+        ),
+      )
+      .toBe(true);
+
+    const lastQuestion = page.getByRole("button", { name: "引导问题 8" });
+    await lastQuestion.scrollIntoViewIfNeeded();
+    await expect(lastQuestion).toBeVisible();
+  });
+
   test("keeps new-chat drafts isolated between agents", async ({ page }) => {
     mockLangGraphAPI(page, { agents: MOCK_AGENTS });
 

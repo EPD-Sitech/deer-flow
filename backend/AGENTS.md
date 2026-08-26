@@ -115,6 +115,12 @@ make format             # Format code with ruff
 make migrate-rev MSG="..."  # Autogenerate a new alembic revision (see Schema Migrations section)
 ```
 
+The production Gateway Docker builder installs the selected runtime extras with
+`uv sync --frozen`. The committed universal `uv.lock` is authoritative at image-build
+time, so an unavailable registry package belonging only to an unselected optional extra
+cannot force an unrelated deployment to re-resolve. CI and local dependency workflows
+remain responsible for `uv lock --check` before the image is built.
+
 The backend `make dev` target pre-creates and excludes `DEER_FLOW_HOME`
 (default: `backend/.deer-flow`) and `backend/sandbox` from Uvicorn's reload
 watcher. Do not replace it with a bare `uvicorn --reload`: agent tasks write

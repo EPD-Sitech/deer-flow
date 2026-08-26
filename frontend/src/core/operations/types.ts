@@ -7,6 +7,8 @@ export interface NamedMetric {
 
 export interface OperationsSeries {
   labels: string[];
+  registered_users: number[];
+  guest_users: number[];
   login_registered: number[];
   login_guest: number[];
   sessions_registered: number[];

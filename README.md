@@ -1025,8 +1025,10 @@ extension, its build backend, or its runtime code.
 
 Local `make dev`/`make start`, Docker development, and the production Gateway image all
 consume the same `backend/pyproject.toml` and `backend/uv.lock`. Local and Docker-dev
-launchers perform a locked sync before starting; the production image performs that sync
-during its build and includes managed local snapshots in the build context. Gateway runtime
+launchers perform a locked sync before starting; the production image performs a frozen
+sync from that committed lock during its build and includes managed local snapshots in the
+build context. Frozen mode avoids re-resolving unselected optional extras against the live
+package index. Gateway runtime
 commands then use the already-created environment without resolving or installing packages.
 Local and Docker-development pre-start syncs may download missing locked artifacts. A
 production deployment instead downloads them only during the explicit install or image
@@ -1141,7 +1143,8 @@ usage. Database-backed metrics render first; slower artifact, skill, and MCP
 inventory scans load independently with skeleton states. Inventory totals use
 durable snapshots for period-over-period comparisons, so the first observation
 shows no comparison instead of inventing historical data. Chart pointer
-tooltips expose the exact value for every displayed series.
+tooltips expose the exact value for every displayed series. User-size trends use
+registered and guest stock at each time bucket.
 
 ### Sub-Agents
 

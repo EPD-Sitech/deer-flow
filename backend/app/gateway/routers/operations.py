@@ -45,6 +45,8 @@ class NamedMetric(BaseModel):
 
 class DashboardSeries(BaseModel):
     labels: list[str]
+    registered_users: list[int]
+    guest_users: list[int]
     login_registered: list[int]
     login_guest: list[int]
     sessions_registered: list[int]
@@ -274,8 +276,12 @@ def _agent_catalog(user_id: str, can_manage_public: bool) -> tuple[int, dict[str
             name = agent.get("name")
             runtime_name = agent.get("runtime_name")
             if isinstance(name, str) and name.strip():
-                display_name = name.strip()
+                configured_display_name = agent.get("display_name")
+                description = agent.get("description")
+                fallback_name = description.strip() if name.strip().startswith("agent-") and isinstance(description, str) and description.strip() else name.strip()
+                display_name = configured_display_name.strip() if isinstance(configured_display_name, str) and configured_display_name.strip() else fallback_name
                 aliases[display_name] = display_name
+                aliases[name.strip()] = display_name
                 if isinstance(runtime_name, str) and runtime_name.strip():
                     aliases[runtime_name.strip()] = display_name
         return len(agents), aliases
@@ -413,6 +419,20 @@ def _bucket_index(
     return idx if 0 <= idx < bucket_count else None
 
 
+def _cumulative_bucket_series(
+    bucket_values: list[int],
+    *,
+    initial_value: int = 0,
+) -> list[int]:
+    """Turn per-bucket additions into a non-decreasing stock series."""
+    current = initial_value
+    result: list[int] = []
+    for value in bucket_values:
+        current += max(0, value)
+        result.append(current)
+    return result
+
+
 def _scan_thread_files(thread_rows: list[tuple[str, str | None]]) -> tuple[int, dict[str, int], int, int]:
     paths = get_paths()
     artifact_count = 0
@@ -532,6 +552,15 @@ async def operations_dashboard(
                 )
             )
         ).all()
+        guest_run_rows = (
+            await session.execute(
+                select(RunRow.user_id, RunRow.created_at).where(
+                    RunRow.operation_kind == "run",
+                    RunRow.user_id.in_(("default", "anonymous", "guest")),
+                    RunRow.created_at < current_end,
+                )
+            )
+        ).all()
         thread_ids = {row.thread_id for row in all_run_rows}
         thread_metadata_rows = (await session.execute(select(ThreadMetaRow.thread_id, ThreadMetaRow.metadata_json).where(ThreadMetaRow.thread_id.in_(thread_ids)))).all()
         thread_metadata = {thread_id: metadata for thread_id, metadata in thread_metadata_rows}
@@ -562,12 +591,11 @@ async def operations_dashboard(
                     OperationEventRow.actor_kind,
                     OperationEventRow.created_at,
                 ).where(
-                    OperationEventRow.created_at >= previous_start,
+                    OperationEventRow.event_type == "login",
                     OperationEventRow.created_at < current_end,
                 )
             )
         ).all()
-        period_operation_rows = [row for row in operation_rows if _in_window(row.created_at, current_start, current_end)]
         previous_operation_rows = [row for row in operation_rows if _in_window(row.created_at, previous_start, current_start)]
 
     _, agent_aliases = await asyncio.to_thread(
@@ -601,6 +629,8 @@ async def operations_dashboard(
     token_cost = [0.0] * bucket_count
     tool_calls = [0] * bucket_count
     skill_activations = [0] * bucket_count
+    registered_users_added = [0] * bucket_count
+    guest_users_added = [0] * bucket_count
     active_users_by_bucket: list[set[str]] = [set() for _ in range(bucket_count)]
 
     top_user_sessions: Counter[str] = Counter()
@@ -613,15 +643,14 @@ async def operations_dashboard(
         user_name = _display_user(row.user_id, emails)
         top_user_sessions[user_name] += 1
         top_user_tokens[user_name] += int(row.total_tokens or 0)
-        top_agents[
-            _run_agent_name(
-                row.assistant_id,
-                row.kwargs_json,
-                thread_metadata.get(row.thread_id),
-                row.metadata_json,
-                agent_aliases,
-            )
-        ] += 1
+        agent_name = _run_agent_name(
+            row.assistant_id,
+            row.kwargs_json,
+            thread_metadata.get(row.thread_id),
+            row.metadata_json,
+            agent_aliases,
+        )
+        top_agents[agent_name] += 1
         actor = _actor_kind(row.user_id)
         if idx is not None:
             if actor == "guest":
@@ -702,13 +731,25 @@ async def operations_dashboard(
 
     top_user_login: Counter[str] = Counter()
     login_total = 0
-    guest_users_in_period: set[str] = set()
-    for event_type, user_id, actor_kind, created_at in period_operation_rows:
+    guest_ids_before_start: set[str] = set()
+    guest_ids_at_end: set[str] = set()
+    guest_first_seen: dict[str, datetime] = {}
+    for event_type, user_id, actor_kind, created_at in operation_rows:
         if event_type != "login":
             continue
-        login_total += 1
+        created = _as_utc(created_at)
         if actor_kind == "guest" and user_id:
-            guest_users_in_period.add(str(user_id))
+            guest_id = str(user_id)
+            if created is not None and created < current_end:
+                guest_ids_at_end.add(guest_id)
+                if created < current_start:
+                    guest_ids_before_start.add(guest_id)
+                previous = guest_first_seen.get(guest_id)
+                if previous is None or created < previous:
+                    guest_first_seen[guest_id] = created
+        if not _in_window(created, current_start, current_end):
+            continue
+        login_total += 1
         idx = _bucket_index(created_at, start_utc=start_utc, tz_offset_minutes=tz_offset_minutes, hourly=hourly, bucket_count=bucket_count)
         if idx is not None:
             if actor_kind == "guest":
@@ -716,6 +757,47 @@ async def operations_dashboard(
             else:
                 login_registered[idx] += 1
         top_user_login[_display_user(user_id, emails)] += 1
+
+    for user_id, created_at in guest_run_rows:
+        created = _as_utc(created_at)
+        if created is None:
+            continue
+        guest_id = str(user_id)
+        guest_ids_at_end.add(guest_id)
+        if created < current_start:
+            guest_ids_before_start.add(guest_id)
+        previous = guest_first_seen.get(guest_id)
+        if previous is None or created < previous:
+            guest_first_seen[guest_id] = created
+
+    for created in guest_first_seen.values():
+        idx = _bucket_index(
+            created,
+            start_utc=start_utc,
+            tz_offset_minutes=tz_offset_minutes,
+            hourly=hourly,
+            bucket_count=bucket_count,
+        )
+        if idx is not None:
+            guest_users_added[idx] += 1
+
+    for _, _, created_at in user_rows:
+        created = _as_utc(created_at)
+        if created is None:
+            continue
+        idx = _bucket_index(created, start_utc=start_utc, tz_offset_minutes=tz_offset_minutes, hourly=hourly, bucket_count=bucket_count)
+        if idx is not None:
+            registered_users_added[idx] += 1
+
+    registered_users_before_start = sum(1 for _, _, created_at in user_rows if (created := _as_utc(created_at)) is not None and created < start_utc)
+    registered_users_series = _cumulative_bucket_series(
+        registered_users_added,
+        initial_value=registered_users_before_start,
+    )
+    guest_users_series = _cumulative_bucket_series(
+        guest_users_added,
+        initial_value=len(guest_ids_before_start),
+    )
 
     def _run_totals(rows: list[Any]) -> tuple[int, int, int, float | None]:
         input_tokens = sum(int(row.total_input_tokens or 0) for row in rows)
@@ -783,8 +865,8 @@ async def operations_dashboard(
         range=dashboard_range,
         totals=DashboardTotals(
             registered_users=registered_users,
-            guest_users=len(guest_users_in_period),
-            total_users=registered_users + len(guest_users_in_period),
+            guest_users=len(guest_ids_at_end),
+            total_users=registered_users + len(guest_ids_at_end),
             active_users=len(active_user_names),
             total_logins=login_total,
             total_sessions=current_run_count,
@@ -802,6 +884,8 @@ async def operations_dashboard(
         ),
         series=DashboardSeries(
             labels=labels,
+            registered_users=registered_users_series,
+            guest_users=guest_users_series,
             login_registered=login_registered,
             login_guest=login_guest,
             sessions_registered=sessions_registered,
@@ -823,8 +907,8 @@ async def operations_dashboard(
         models=_top(model_tokens),
         comparisons={
             "total_users": _percent_change(
-                registered_users + len(guest_users_in_period),
-                registered_users_at_previous_start + len({str(row.user_id) for row in previous_operation_rows if row.actor_kind == "guest" and row.user_id}),
+                registered_users + len(guest_ids_at_end),
+                registered_users_at_previous_start + len(guest_ids_before_start),
             ),
             "total_logins": _percent_change(login_total, previous_logins),
             "total_sessions": _percent_change(current_run_count, previous_sessions),

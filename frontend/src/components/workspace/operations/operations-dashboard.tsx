@@ -65,7 +65,13 @@ function linePath(
   const step = values.length > 1 ? width / (values.length - 1) : width;
   const points = values.map((value, index) => ({
     x: index * step,
-    y: height - (value / scaleMax) * (height - 8) - 4,
+    y: Math.max(
+      4,
+      Math.min(
+        height - 4,
+        height - (Math.max(0, value) / scaleMax) * (height - 8) - 4,
+      ),
+    ),
   }));
   if (points.length === 1) return `M${points[0]!.x},${points[0]!.y}`;
 
@@ -78,9 +84,15 @@ function linePath(
     const previous = points[index - 1] ?? current;
     const following = points[index + 2] ?? next;
     const c1x = current.x + (next.x - previous.x) / 6;
-    const c1y = current.y + (next.y - previous.y) / 6;
+    const c1y = Math.max(
+      4,
+      Math.min(height - 4, current.y + (next.y - previous.y) / 6),
+    );
     const c2x = next.x - (following.x - current.x) / 6;
-    const c2y = next.y - (following.y - current.y) / 6;
+    const c2y = Math.max(
+      4,
+      Math.min(height - 4, next.y - (following.y - current.y) / 6),
+    );
     path += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${next.x.toFixed(1)},${next.y.toFixed(1)}`;
   }
   return path;
@@ -112,13 +124,17 @@ function SeriesChart({
   const height = 180;
   const plotLeft = 34;
   const plotWidth = width - plotLeft;
-  const max = Math.max(...series.flatMap((item) => item.values), 1);
+  const max = Math.max(
+    ...series.flatMap((item) => item.values.map((value) => Math.max(0, value))),
+    1,
+  );
   const ticks = [0, Math.round(max / 2), max];
   const hasData = series.some((item) => item.values.some((value) => value > 0));
   const pointX = (index: number) =>
     plotLeft +
     (labels.length > 1 ? (index * plotWidth) / (labels.length - 1) : 0);
-  const pointY = (value: number) => height - (value / max) * (height - 8) - 4;
+  const pointY = (value: number) =>
+    height - (Math.max(0, value) / max) * (height - 8) - 4;
   const tooltipWidth = 188;
   const tooltipHeight = 30 + series.length * 20;
   const hoverX = hoverIndex === null ? null : pointX(hoverIndex);
@@ -155,9 +171,17 @@ function SeriesChart({
           aria-label="趋势统计图"
           onMouseMove={(event) => {
             if (!labels.length) return;
-            const bounds = event.currentTarget.getBoundingClientRect();
-            const viewBoxX =
-              ((event.clientX - bounds.left) / bounds.width) * width;
+            const svg = event.currentTarget;
+            const point = svg.createSVGPoint();
+            point.x = event.clientX;
+            point.y = event.clientY;
+            const transform = svg.getScreenCTM();
+            const viewBoxX = transform
+              ? point.matrixTransform(transform.inverse()).x
+              : (() => {
+                  const bounds = svg.getBoundingClientRect();
+                  return ((event.clientX - bounds.left) / bounds.width) * width;
+                })();
             const relativeX = Math.min(
               plotWidth,
               Math.max(0, viewBoxX - plotLeft),
@@ -659,20 +683,20 @@ export function OperationsDashboardPage() {
               <div className="grid gap-4 xl:grid-cols-4">
                 <Panel
                   title="用户规模与活跃趋势"
-                  description="注册用户 / 游客用户来自运营事件，活跃用户来自期间内运行用户"
+                  description="注册用户、游客用户按各时间点存量统计，活跃用户来自期间内运行用户"
                   className="xl:col-span-4"
                 >
                   <SeriesChart
                     labels={data.series.labels}
                     series={[
                       {
-                        name: "注册登录",
-                        values: data.series.login_registered,
+                        name: "注册用户",
+                        values: data.series.registered_users,
                         color: "#2563eb",
                       },
                       {
-                        name: "游客登录",
-                        values: data.series.login_guest,
+                        name: "游客用户",
+                        values: data.series.guest_users,
                         color: "#10b981",
                       },
                       {

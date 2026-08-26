@@ -7,7 +7,8 @@ The base response drives the first render; the slower filesystem and skill/MCP
 details retain a local skeleton and failure boundary. Both queries are keyed by
 the selected range and browser timezone so deferred inventory comparisons use
 the same period boundary as the base charts. Trend charts expose exact
-per-series values through pointer tooltips, while inventory KPI comparisons
+per-series values through pointer tooltips. Registered and guest user trends
+are stock counts at each time bucket. Inventory KPI comparisons
 come from the details response and remain unavailable until a historical
 snapshot exists. The page should stay a read-only dashboard surface and must
 not derive product metrics from live chat component state.

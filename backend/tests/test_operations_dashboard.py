@@ -10,6 +10,7 @@ from app.gateway.routers import operations
 from app.gateway.routers.operations import (
     OperationsDashboardResponse,
     _bucket_index,
+    _cumulative_bucket_series,
     _json_content,
     _operations_usage,
     _percent_change,
@@ -37,6 +38,11 @@ def test_operations_bucket_index_rejects_out_of_window_rows():
     assert _bucket_index(created, start_utc=start_utc, tz_offset_minutes=0, hourly=False, bucket_count=7) is None
 
 
+def test_operations_cumulative_bucket_series_preserves_stock_semantics():
+    assert _cumulative_bucket_series([0, 2, 0, 1], initial_value=5) == [5, 7, 7, 8]
+    assert _cumulative_bucket_series([1, -3, 2]) == [1, 1, 3]
+
+
 def test_operations_json_content_accepts_serialized_dict_only():
     assert _json_content('{"name":"read_file"}') == {"name": "read_file"}
     assert _json_content("[1,2,3]") == {}
@@ -59,6 +65,60 @@ def test_operations_run_agent_name_prefers_expert_context():
         == "公众号运营智能体"
     )
     assert _run_agent_name("lead_agent", {}) == "默认智能体"
+
+
+def test_operations_agent_catalog_prefers_configured_display_name(monkeypatch):
+    class FakeCatalog:
+        def __init__(self, **_kwargs):
+            pass
+
+        def list_agents(self):
+            return [
+                {
+                    "name": "wechat-operator",
+                    "runtime_name": "agent-abc123",
+                    "display_name": "公众号运营智能体",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "app.gateway.agent_management.catalog.AgentCatalogService",
+        FakeCatalog,
+    )
+    monkeypatch.setattr(
+        "deerflow.persistence.agents.get_agent_store",
+        lambda: object(),
+    )
+
+    _, aliases = operations._agent_catalog("admin", True)
+
+    assert aliases["agent-abc123"] == "公众号运营智能体"
+    assert aliases["wechat-operator"] == "公众号运营智能体"
+
+
+def test_operations_agent_catalog_uses_description_for_runtime_alias(monkeypatch):
+    class FakeCatalog:
+        def __init__(self, **_kwargs):
+            pass
+
+        def list_agents(self):
+            return [
+                {
+                    "name": "agent-2776d1f2c2ef7f60",
+                    "runtime_name": "agent-2776d1f2c2ef7f60",
+                    "description": "产品经理培训答疑",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "app.gateway.agent_management.catalog.AgentCatalogService",
+        FakeCatalog,
+    )
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: object())
+
+    _, aliases = operations._agent_catalog("admin", True)
+
+    assert aliases["agent-2776d1f2c2ef7f60"] == "产品经理培训答疑"
 
 
 def test_operations_event_name_helpers_support_persisted_shapes():
@@ -127,11 +187,7 @@ async def test_operations_inventory_snapshot_persists_and_uses_period_start_base
         }
         async with session_factory() as session:
             count = await session.scalar(select(func.count()).select_from(OperationInventorySnapshotRow))
-            current = await session.scalar(
-                select(OperationInventorySnapshotRow)
-                .where(OperationInventorySnapshotRow.captured_at == captured_at)
-                .limit(1)
-            )
+            current = await session.scalar(select(OperationInventorySnapshotRow).where(OperationInventorySnapshotRow.captured_at == captured_at).limit(1))
         assert count == 2
         assert current is not None
         assert current.total_agents == 10

@@ -263,11 +263,12 @@ def test_docker_dev_entrypoint_syncs_the_lock_before_runtime() -> None:
     assert runtime_at > sync_at
 
 
-def test_docker_image_builds_from_the_lock_and_never_syncs_at_runtime() -> None:
+def test_docker_image_builds_from_the_frozen_lock_and_never_syncs_at_runtime() -> None:
     dockerfile = (BACKEND_ROOT / "Dockerfile").read_text(encoding="utf-8")
     production_compose = (REPO_ROOT / "docker" / "docker-compose.yaml").read_text(encoding="utf-8")
 
-    assert "uv sync --locked --extra redis" in dockerfile
+    assert "uv sync --frozen --extra redis" in dockerfile
+    assert "uv sync --locked --extra redis" not in dockerfile
     assert "ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.1" in dockerfile
     assert dockerfile.count("uv run --no-sync uvicorn app.gateway.app:app") == 2
     assert "uv run --no-sync uvicorn app.gateway.app:app" in production_compose

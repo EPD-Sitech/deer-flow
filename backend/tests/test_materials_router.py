@@ -114,6 +114,16 @@ def test_validate_preview_url_accepts_current_material_url(monkeypatch) -> None:
     assert _validate_preview_url("thread-1", "/mnt/user-data/outputs/静夜思.md", url, "deerflow.example") == url
 
 
+def test_validate_preview_url_accepts_https_default_port_from_request_host(monkeypatch) -> None:
+    url = "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed"
+    monkeypatch.setattr(
+        "app.gateway.routers.materials.verify_artifact_token",
+        lambda token: {"thread_id": "thread-1", "path": "/mnt/user-data/outputs/report.pdf"} if token == "signed" else None,
+    )
+
+    assert _validate_preview_url("thread-1", "/mnt/user-data/outputs/report.pdf", url, "deerflow.example:443") == url
+
+
 def test_preview_url_uses_gateway_request_host(monkeypatch) -> None:
     monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
     request = Request({"type": "http", "scheme": "http", "server": ("127.0.0.1", 8001), "path": "/api/materials", "headers": [(b"host", b"127.0.0.1:8001")]})
@@ -121,6 +131,44 @@ def test_preview_url_uses_gateway_request_host(monkeypatch) -> None:
     url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
 
     assert url == "http://127.0.0.1:8001/api/public/artifacts/thread-1/mnt/user-data/outputs/%E9%9D%99%E5%A4%9C%E6%80%9D.md?artifact_token=signed"
+
+
+def test_preview_url_uses_forwarded_https_host_and_removes_default_port(monkeypatch) -> None:
+    monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
+    request = Request(
+        {
+            "type": "http",
+            "scheme": "http",
+            "server": ("gateway", 8001),
+            "path": "/api/materials",
+            "headers": [
+                (b"host", b"gateway:8001"),
+                (b"x-forwarded-host", b"fintech.teamshub.com:443"),
+                (b"x-forwarded-proto", b"https"),
+            ],
+        }
+    )
+
+    url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
+
+    assert url.startswith("https://fintech.teamshub.com/api/public/artifacts/thread-1/")
+
+
+def test_preview_url_inferrs_https_from_host_port_when_proxy_protocol_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
+    request = Request(
+        {
+            "type": "http",
+            "scheme": "http",
+            "server": ("gateway", 8001),
+            "path": "/api/materials",
+            "headers": [(b"host", b"fintech.teamshub.com:443")],
+        }
+    )
+
+    url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
+
+    assert url.startswith("https://fintech.teamshub.com/api/public/artifacts/thread-1/")
 
 
 @pytest.mark.parametrize(

@@ -7,7 +7,7 @@ import mimetypes
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit, urlunsplit
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -308,9 +308,14 @@ def _validate_preview_url(thread_id: str, path: str, url: str, request_host: str
     query = parse_qs(parsed.query)
     tokens = query.get("artifact_token", [])
     payload = verify_artifact_token(tokens[0]) if len(tokens) == 1 else None
+    normalized_host = request_host.lower().strip()
+    if normalized_host.endswith(":443") and parsed.scheme == "https":
+        normalized_host = normalized_host[:-4]
+    elif normalized_host.endswith(":80") and parsed.scheme == "http":
+        normalized_host = normalized_host[:-3]
     if (
         parsed.scheme not in {"http", "https"}
-        or parsed.netloc.lower() != request_host.lower()
+        or parsed.netloc.lower() != normalized_host
         or unquote(parsed.path) != expected_path
         or parsed.fragment
         or username is not None
@@ -326,7 +331,22 @@ def _validate_preview_url(thread_id: str, path: str, url: str, request_host: str
 def _preview_url(request: Request, thread_id: str, path: str, user_id: str | None) -> str:
     token = create_artifact_token(thread_id=thread_id, path=path, user_id=user_id or "default")
     encoded_path = quote(path.lstrip("/"), safe="/")
-    return f"{str(request.base_url).rstrip('/')}/api/public/artifacts/{quote(thread_id, safe='')}/{encoded_path}?artifact_token={quote(token, safe='')}"
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    base = urlsplit(str(request.base_url))
+    host = forwarded_host or request.headers.get("host", "") or base.netloc
+    if forwarded_proto in {"http", "https"}:
+        scheme = forwarded_proto
+    elif host.lower().endswith(":443"):
+        scheme = "https"
+    else:
+        scheme = base.scheme
+    if scheme == "https" and host.endswith(":443"):
+        host = host[:-4]
+    elif scheme == "http" and host.endswith(":80"):
+        host = host[:-3]
+    external_base = urlunsplit((scheme, host, "", "", "")).rstrip("/")
+    return f"{external_base}/api/public/artifacts/{quote(thread_id, safe='')}/{encoded_path}?artifact_token={quote(token, safe='')}"
 
 
 @router.get("/capabilities")
@@ -364,7 +384,8 @@ async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Qu
     if material is None or material["status"] != "ready":
         raise HTTPException(status_code=404, detail="Material not found")
     try:
-        preview_url = _validate_preview_url(str(thread_id), path, url, request.headers.get("host", ""))
+        request_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip() or request.headers.get("host", "")
+        preview_url = _validate_preview_url(str(thread_id), path, url, request_host)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     config = get_extensions_config()

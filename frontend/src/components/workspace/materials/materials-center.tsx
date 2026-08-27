@@ -3,12 +3,15 @@
 import {
   ArrowUpFromLineIcon,
   ChevronDownIcon,
+  Code2Icon,
   DownloadIcon,
+  EyeIcon,
   ExternalLinkIcon,
   LoaderIcon,
   MessagesSquareIcon,
   SearchIcon,
   StarIcon,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -29,6 +32,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { loadArtifactContent } from "@/core/artifacts/loader";
+import { appendHtmlPreviewBaseHref } from "@/core/artifacts/preview";
 import { urlOfArtifact } from "@/core/artifacts/utils";
 import { useAuth } from "@/core/auth/AuthProvider";
 import {
@@ -37,7 +43,17 @@ import {
   useMaterials,
 } from "@/core/materials/hooks";
 import type { Material } from "@/core/materials/types";
+import { SafeStreamdown } from "@/core/streamdown/components";
+import {
+  canBrowserPreviewFile,
+  checkCodeFile,
+  getFileExtensionDisplayName,
+  getFileIcon,
+  getFileName,
+} from "@/core/utils/files";
 import { cn } from "@/lib/utils";
+
+import { artifactMarkdownPlugins } from "../artifacts/markdown-preview-plugins";
 
 const iconMap: Record<string, string> = {
   doc: "/images/file/office-doc.png",
@@ -135,77 +151,211 @@ function previewURLOf(item: Material) {
     : artifactURL.toString();
 }
 
-function Preview({ item }: { item: Material }) {
+function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
   const url = previewURLOf(item);
-  const isImage = item.type === "image";
-  const isVideo = item.type === "video";
-  const isAudio = item.type === "audio";
+  const { isCodeFile, language } = useMemo(
+    () => checkCodeFile(item.path),
+    [item.path],
+  );
+  const supportsTextPreview = language === "html" || language === "markdown";
+  const canPreviewInBrowser = canBrowserPreviewFile(item.path);
+  const [viewMode, setViewMode] = useState<"code" | "preview">(
+    supportsTextPreview ? "preview" : "code",
+  );
+  const [content, setContent] = useState("");
+  const [isLoading, setIsLoading] = useState(isCodeFile);
+  const [loadError, setLoadError] = useState(false);
+  const [htmlPreviewURL, setHtmlPreviewURL] = useState<string>();
+
   useEffect(() => {
-    console.info(
-      "[资料中心] 文件预览 URL:",
-      new URL(url, window.location.origin).toString(),
+    setViewMode(supportsTextPreview ? "preview" : "code");
+  }, [item.path, supportsTextPreview]);
+
+  useEffect(() => {
+    if (!isCodeFile || item.status === "missing") {
+      setContent("");
+      setIsLoading(false);
+      setLoadError(false);
+      return;
+    }
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError(false);
+    void loadArtifactContent({
+      filepath: item.path,
+      threadId: item.thread_id,
+    })
+      .then((result) => {
+        if (!cancelled) setContent(result.content);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCodeFile, item.path, item.status, item.thread_id]);
+
+  useEffect(() => {
+    if (language !== "html" || !content) {
+      setHtmlPreviewURL(undefined);
+      return;
+    }
+    const objectURL = URL.createObjectURL(
+      new Blob([appendHtmlPreviewBaseHref(content, url)], {
+        type: "text/html;charset=utf-8",
+      }),
     );
-  }, [url]);
+    setHtmlPreviewURL(objectURL);
+    return () => URL.revokeObjectURL(objectURL);
+  }, [content, language, url]);
+
   return (
     <div className="bg-background text-foreground flex h-full flex-col">
-      <div className="bg-muted/30 flex items-start gap-3 border-b p-5">
-        <MaterialIcon item={item} />
-        <div className="min-w-0 flex-1 pr-6">
-          <h2 className="text-foreground text-base font-semibold break-all">
-            {item.name}
-          </h2>
-          <p className="text-muted-foreground mt-1 text-xs">
-            {typeLabels[item.type] ?? "其他"} · {formatSize(item.size)}
-          </p>
+      <div className="bg-muted/50 flex items-center justify-between gap-2 border-b px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <MaterialIcon item={item} />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-medium" title={item.name}>
+              {item.name}
+            </h2>
+            <p className="text-muted-foreground text-xs">
+              {getFileExtensionDisplayName(item.path)} file ·{" "}
+              {formatSize(item.size)}
+            </p>
+          </div>
+        </div>
+        {supportsTextPreview && !isLoading && !loadError && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={viewMode}
+            onValueChange={(value) =>
+              value && setViewMode(value as "code" | "preview")
+            }
+          >
+            <ToggleGroupItem value="code" aria-label="代码视图">
+              <Code2Icon />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="preview" aria-label="预览视图">
+              <EyeIcon />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" asChild>
+            <Link
+              href={`/workspace/chats/${item.thread_id}`}
+              aria-label="打开源会话"
+            >
+              <ExternalLinkIcon className="size-4" />
+            </Link>
+          </Button>
+          <Button variant="ghost" size="icon-sm" asChild>
+            <a
+              href={urlOfArtifact({
+                filepath: item.path,
+                threadId: item.thread_id,
+                download: true,
+              })}
+              download
+              aria-label="下载"
+            >
+              <DownloadIcon className="size-4" />
+            </a>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            aria-label="关闭预览"
+          >
+            <XIcon className="size-4" />
+          </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto p-5">
+      <div className="min-h-0 flex-1">
         {item.status === "missing" ? (
-          <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
-            文件已失效或不存在
+          <PreviewFallback item={item} message="文件已失效或不存在" />
+        ) : loadError ? (
+          <PreviewFallback item={item} message="文件预览加载失败" />
+        ) : isLoading ? (
+          <div className="text-muted-foreground flex size-full items-center justify-center gap-2 text-sm">
+            <LoaderIcon className="size-4 animate-spin" />
+            正在加载预览…
           </div>
-        ) : isImage ? (
-          <img
-            src={url}
-            alt={item.name}
-            className="bg-background mx-auto max-h-[65vh] max-w-full rounded-lg border object-contain shadow-sm"
-          />
-        ) : isVideo ? (
-          <video
-            src={url}
-            controls
-            className="mx-auto max-h-[65vh] max-w-full rounded-lg bg-neutral-950"
-          />
-        ) : isAudio ? (
-          <audio src={url} controls className="mt-10 w-full" />
-        ) : (
+        ) : isCodeFile && language === "markdown" && viewMode === "preview" ? (
+          <div className="size-full overflow-auto px-4 py-3">
+            <SafeStreamdown className="min-w-0" {...artifactMarkdownPlugins}>
+              {content}
+            </SafeStreamdown>
+          </div>
+        ) : isCodeFile && language === "html" && viewMode === "preview" ? (
           <iframe
             title={item.name}
+            className="size-full"
+            sandbox="allow-scripts allow-forms"
+            src={htmlPreviewURL}
+          />
+        ) : isCodeFile ? (
+          <pre className="size-full overflow-auto p-4 font-mono text-sm whitespace-pre-wrap">
+            {content}
+          </pre>
+        ) : canPreviewInBrowser ? (
+          <iframe
+            title={item.name}
+            className="size-full"
+            sandbox=""
             src={url}
-            className="bg-background h-[65vh] w-full rounded-lg border"
+          />
+        ) : (
+          <PreviewFallback
+            item={item}
+            message="此文件类型无法在浏览器中预览。"
           />
         )}
       </div>
-      <div className="bg-background flex items-center justify-between border-t p-3">
-        <Link
-          href={`/workspace/chats/${item.thread_id}`}
-          className="text-primary inline-flex items-center gap-1.5 text-xs hover:underline"
-        >
-          <ExternalLinkIcon className="size-3.5" />
-          打开源会话
-        </Link>
-        <a
-          href={urlOfArtifact({
-            filepath: item.path,
-            threadId: item.thread_id,
-            download: true,
-          })}
-          download
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium"
-        >
-          <DownloadIcon className="size-3.5" />
-          下载
-        </a>
+    </div>
+  );
+}
+
+function PreviewFallback({
+  item,
+  message,
+}: {
+  item: Material;
+  message: string;
+}) {
+  return (
+    <div className="flex size-full items-center justify-center p-6">
+      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+        <div className="text-muted-foreground">
+          {getFileIcon(item.path, "size-12")}
+        </div>
+        <div className="space-y-1">
+          <div className="font-medium break-all">{getFileName(item.path)}</div>
+          <div className="text-muted-foreground text-sm">
+            {getFileExtensionDisplayName(item.path)} file
+          </div>
+        </div>
+        <p className="text-muted-foreground text-sm">{message}</p>
+        <Button asChild>
+          <a
+            href={urlOfArtifact({
+              filepath: item.path,
+              threadId: item.thread_id,
+              download: true,
+            })}
+            download
+          >
+            <DownloadIcon className="size-4" />
+            下载
+          </a>
+        </Button>
       </div>
     </div>
   );
@@ -441,11 +591,16 @@ export function MaterialsCenter() {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       >
-        <SheetContent side="right" className="w-full p-0 sm:max-w-[480px]">
+        <SheetContent
+          side="right"
+          className="w-[calc(100vw-1rem)] max-w-none gap-0 p-0 sm:max-w-none md:w-[40vw] [&>button]:hidden"
+        >
           <SheetHeader className="sr-only">
             <SheetTitle>{selected?.name ?? "资料预览"}</SheetTitle>
           </SheetHeader>
-          {selected && <Preview item={selected} />}
+          {selected && (
+            <Preview item={selected} onClose={() => setSelected(null)} />
+          )}
         </SheetContent>
       </Sheet>
       <style jsx>{`

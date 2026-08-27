@@ -225,7 +225,7 @@ export function MaterialsCenter() {
     upload.mutate(
       { threadId: item.thread_id, path: item.path },
       {
-        onSuccess: () => toast.success("已上传至政务知识库"),
+        onSuccess: () => toast.success("成功上传文件到知识库"),
         onError: (e) => toast.error(e.message),
       },
     );
@@ -396,8 +396,8 @@ export function MaterialsCenter() {
                                 className="size-7 text-[#5d7185]"
                                 disabled={upload.isPending}
                                 onClick={() => uploadItem(item)}
-                                aria-label="上传至政务知识库"
-                                title="上传至政务知识库"
+                                aria-label="上传到知识库"
+                                title="上传到知识库"
                               >
                                 {upload.isPending ? (
                                   <LoaderIcon className="size-4 animate-spin" />

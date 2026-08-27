@@ -4,7 +4,6 @@ import pytest
 
 from app.gateway.routers.materials import (
     KNOWLEDGE_BASE_ID,
-    KNOWLEDGE_UPLOAD_TOOL,
     _file_type,
     _presented_paths,
     _scan_output_files,
@@ -47,12 +46,20 @@ def test_scan_output_files_includes_files_but_skips_internal_dirs(tmp_path) -> N
 
 
 def test_upload_args_requires_knowledge_and_file_fields() -> None:
-    tool = SimpleNamespace(args_schema=SimpleNamespace(model_fields={"knowledge_base_id": object(), "file_path": object(), "title": object()}))
+    tool = SimpleNamespace(
+        args_schema=SimpleNamespace(
+            model_fields={
+                "kb_id": object(),
+                "file_path": object(),
+                "enable_multimodel": object(),
+            }
+        )
+    )
 
     assert _upload_args(tool, "/mnt/user-data/outputs/report.pdf") == {
-        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+        "kb_id": KNOWLEDGE_BASE_ID,
         "file_path": "/mnt/user-data/outputs/report.pdf",
-        "title": "report.pdf",
+        "enable_multimodel": True,
     }
 
 
@@ -81,18 +88,14 @@ def test_upload_args_supports_tool_args_fallback() -> None:
     }
 
 
-def test_upload_tool_uses_weknora_tool_namespace(monkeypatch) -> None:
-    list_tool = SimpleNamespace(
-        name="shopProduct-server_weknora-list-knowledge-bases",
-        args_schema=SimpleNamespace(model_fields={}),
-    )
+def test_upload_tool_uses_create_knowledge_from_file(monkeypatch) -> None:
     upload_tool = SimpleNamespace(
-        name=KNOWLEDGE_UPLOAD_TOOL,
-        args_schema=SimpleNamespace(model_fields={"knowledge_base_id": object(), "file_path": object()}),
+        name="shopProduct-server_weknora-create-knowledge-from-file",
+        args_schema=SimpleNamespace(model_fields={"kb_id": object(), "file_path": object(), "enable_multimodel": object()}),
     )
     monkeypatch.setattr(
         "app.gateway.routers.materials.get_cached_mcp_tools",
-        lambda: [list_tool, upload_tool],
+        lambda: [upload_tool],
     )
 
     assert _upload_tool() is upload_tool

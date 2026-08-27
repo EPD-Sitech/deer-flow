@@ -23,9 +23,8 @@ from deerflow.workspace_changes.scanner import EXCLUDED_DIR_NAMES, is_sensitive_
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
 KNOWLEDGE_SERVERS = ("shopProduct-server", "weknora")
-KNOWLEDGE_TOOL_PREFIX = "shopProduct-server_weknora-"
-KNOWLEDGE_UPLOAD_TOOL = "shopProduct-server_weknora-create-knowledge-from-file"
-KNOWLEDGE_BASE_ID = "b125cf1a-55b3-415e-88a5-cf414e824dff"
+KNOWLEDGE_UPLOAD_TOOL = "create-knowledge-from-file"
+KNOWLEDGE_BASE_ID = "5cf6bd7f-6aae-4304-b8a2-a5e289912445"
 FAVORITES_KEY = "deerflow_material_favorites"
 
 
@@ -238,7 +237,11 @@ async def set_favorite(thread_id: ThreadId, request: Request, body: MaterialFavo
 
 
 def _knowledge_tools(tools: list[Any]) -> list[Any]:
-    return [tool for tool in tools if getattr(tool, "name", "").startswith(KNOWLEDGE_TOOL_PREFIX)]
+    return [tool for tool in tools if (name := getattr(tool, "name", "")) == KNOWLEDGE_UPLOAD_TOOL or name.endswith(f"_{KNOWLEDGE_UPLOAD_TOOL}") or name.endswith(f"-{KNOWLEDGE_UPLOAD_TOOL}")]
+
+
+def _related_knowledge_tools(tools: list[Any]) -> list[Any]:
+    return [tool for tool in tools if any(token in getattr(tool, "name", "").lower() for token in ("weknora", "knowledge", "file"))]
 
 
 def _schema_fields(tool: Any) -> dict[str, Any]:
@@ -253,13 +256,7 @@ def _schema_fields(tool: Any) -> dict[str, Any]:
 def _upload_tool() -> Any | None:
     def find(tools: list[Any]) -> Any | None:
         candidates = _knowledge_tools(tools)
-        candidates.sort(
-            key=lambda tool: (
-                getattr(tool, "name", "") != KNOWLEDGE_UPLOAD_TOOL,
-                not any(word in getattr(tool, "name", "").lower() for word in ("upload", "import", "document", "file")),
-                getattr(tool, "name", ""),
-            )
-        )
+        candidates.sort(key=lambda tool: (getattr(tool, "name", "") != KNOWLEDGE_UPLOAD_TOOL, getattr(tool, "name", "")))
         for tool in candidates:
             try:
                 _upload_args(tool, "/mnt/user-data/outputs/material")
@@ -287,6 +284,8 @@ def _upload_args(tool: Any, path: str) -> dict[str, Any]:
         if "knowledge" in key or key in {"kb_id", "kbid", "dataset_id", "dataset", "space_id", "space", "collection_id"}:
             values[name] = KNOWLEDGE_BASE_ID
             knowledge_field = True
+        elif key in {"enable_multimodel", "enable_multimodal"}:
+            values[name] = True
         elif any(token in key for token in ("path", "file", "document", "content", "attachment", "source", "upload")) and "url" not in key:
             values[name] = path
             file_field = True
@@ -294,7 +293,7 @@ def _upload_args(tool: Any, path: str) -> dict[str, Any]:
             values[name] = Path(path).name
     if not knowledge_field or not file_field:
         field_names = ", ".join(fields) or "无"
-        raise ValueError(f"政务知识库工具参数不匹配，当前参数: {field_names}")
+        raise ValueError(f"知识库工具参数不匹配，当前参数: {field_names}")
     return values
 
 
@@ -312,7 +311,7 @@ async def material_capabilities(request: Request):
         "can_upload": bool(is_admin and configured_servers),
         "available": False,
         "servers": configured_servers,
-        "tool_prefix": KNOWLEDGE_TOOL_PREFIX,
+        "tool": KNOWLEDGE_UPLOAD_TOOL,
         "knowledge_base_id": KNOWLEDGE_BASE_ID,
     }
 
@@ -322,7 +321,7 @@ async def material_capabilities(request: Request):
 async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Query(...)) -> KnowledgeUploadResponse:
     user = getattr(request.state, "user", None)
     if getattr(user, "system_role", None) != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可以上传政务知识库")
+        raise HTTPException(status_code=403, detail="仅管理员可以上传知识库")
     if not path.startswith("/mnt/user-data/outputs/"):
         raise HTTPException(status_code=400, detail="Invalid material path")
     materials = await _collect(request, q="", type_key="all", favorites_only=False)
@@ -334,20 +333,21 @@ async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Qu
         raise HTTPException(status_code=404, detail="Material not found")
     config = get_extensions_config()
     if not any((config.mcp_servers.get(name) and config.mcp_servers[name].enabled) for name in KNOWLEDGE_SERVERS):
-        raise HTTPException(status_code=409, detail="政务知识库 MCP 未配置或未启用")
+        raise HTTPException(status_code=409, detail="知识库 MCP 未配置或未启用")
     tool = await asyncio.to_thread(_upload_tool)
     if tool is None:
+        cached_tools = get_cached_mcp_tools()
         discovered = [
             {
                 "name": getattr(candidate, "name", ""),
                 "parameters": list(_schema_fields(candidate)),
             }
-            for candidate in _knowledge_tools(get_cached_mcp_tools())
+            for candidate in _related_knowledge_tools(cached_tools)
         ]
         if discovered:
-            detail = f"未找到推荐工具 {KNOWLEDGE_UPLOAD_TOOL} 或其它可上传工具；已发现工具: {discovered}"
+            detail = f"工具 {KNOWLEDGE_UPLOAD_TOOL} 参数不兼容；已发现工具: {discovered}"
         else:
-            detail = f"未发现以 {KNOWLEDGE_TOOL_PREFIX} 开头的 MCP 工具，请检查 shopProduct-server 的工具发现状态"
+            detail = f"未发现 MCP 工具 {KNOWLEDGE_UPLOAD_TOOL}，请检查知识库 MCP 的工具发现状态"
         raise HTTPException(status_code=503, detail=detail)
     try:
         upload_args = _upload_args(tool, path)

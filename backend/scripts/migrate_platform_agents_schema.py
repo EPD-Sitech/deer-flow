@@ -238,6 +238,12 @@ def migrate(conn, schema: str, *, allow_missing: bool) -> str:
         raise RuntimeError(f"{platform} contains {invalid_count} row(s) without a matching agents row; repair them first or rerun with --allow-missing-runtime")
 
     conn.execute(text(f"alter table {platform} rename to platform_agents_legacy"))
+    # The renamed legacy table still carries the old FK to ``agents`` with
+    # ``ON DELETE SET NULL``. Its ``user_id`` column is NOT NULL, so deleting
+    # an agent fails with a not-null violation (the FK action tries to null
+    # ``user_id``). The legacy table is a static backup and must not be tied to
+    # the agents lifecycle, so drop the stale FK here.
+    conn.execute(text(f"alter table {legacy} drop constraint if exists fk_platform_agents_deerflow_agent"))
     _create_platform_table(conn, schema)
     conn.execute(
         text(

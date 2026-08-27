@@ -24,7 +24,11 @@ from deerflow.config.model_config import ModelConfig
 
 logger = logging.getLogger(__name__)
 
-_TRANSIT_MODEL_USE = "langchain_openai:ChatOpenAI"
+# oneai repeats the full ``usage`` in every streaming chunk for some models,
+# which ``langchain_openai`` then *sums* across chunks and inflates token
+# counts. Route all transit models through the patched adapter that keeps only
+# the last chunk's ``usage`` (see ``deerflow/models/patched_oneai.py``).
+_TRANSIT_MODEL_USE = "deerflow.models.patched_oneai:PatchedChatONEAI"
 _CATALOG_TTL_SECONDS = 60.0
 
 # base_url -> (fetched_at, list[ModelConfig])

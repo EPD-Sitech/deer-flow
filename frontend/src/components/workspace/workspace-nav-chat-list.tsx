@@ -4,6 +4,7 @@ import {
   BarChart3Icon,
   BotIcon,
   CalendarClock,
+  BookOpenIcon,
   MessagesSquare,
   PuzzleIcon,
 } from "lucide-react";
@@ -106,6 +107,17 @@ export function WorkspaceNavChatList() {
             >
               <CalendarClock />
               <span>{t.sidebar.scheduledTasks}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname.startsWith("/workspace/materials")}
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/materials">
+              <BookOpenIcon />
+              <span>资料</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

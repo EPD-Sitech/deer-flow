@@ -30,6 +30,7 @@ from app.gateway.routers import (
     integrations,
     mcp,
     mcp_tasks,
+    materials,
     memory,
     models,
     operations,
@@ -709,6 +710,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Durable MCP tasks are scoped to their owning thread.
     app.include_router(mcp_tasks.router)
+
+    # Global materials center API.
+    app.include_router(materials.router)
 
     # Memory API is mounted at /api/memory
     app.include_router(memory.router)

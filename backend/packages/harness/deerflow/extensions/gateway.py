@@ -29,7 +29,9 @@ _HOST_PUBLIC_PATH_PREFIXES = (
     "/openapi.json",
     "/api/v1/auth/oauth/",
     "/api/v1/auth/callback/",
+    "/api/v1/auth/cas/",
     "/api/webhooks/",
+    "/api/public/artifacts/",
 )
 _HOST_PUBLIC_EXACT_PATHS = frozenset(
     {

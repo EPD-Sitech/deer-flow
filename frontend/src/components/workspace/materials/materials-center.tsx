@@ -11,7 +11,7 @@ import {
   StarIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -118,11 +118,27 @@ function MaterialIcon({ item }: { item: Material }) {
   );
 }
 
+function previewURLOf(item: Material) {
+  const artifactURL = new URL(
+    urlOfArtifact({ filepath: item.path, threadId: item.thread_id }),
+    window.location.origin,
+  );
+  return item.preview_url
+    ? new URL(item.preview_url, artifactURL.origin).toString()
+    : artifactURL.toString();
+}
+
 function Preview({ item }: { item: Material }) {
-  const url = urlOfArtifact({ filepath: item.path, threadId: item.thread_id });
+  const url = previewURLOf(item);
   const isImage = item.type === "image";
   const isVideo = item.type === "video";
   const isAudio = item.type === "audio";
+  useEffect(() => {
+    console.info(
+      "[资料中心] 文件预览 URL:",
+      new URL(url, window.location.origin).toString(),
+    );
+  }, [url]);
   return (
     <div className="flex h-full flex-col bg-[#f7fafd]">
       <div className="flex items-start gap-3 border-b border-[#e4edf5] bg-linear-to-br from-[#f7fbff] to-[#edf6ff] p-5">
@@ -223,7 +239,11 @@ export function MaterialsCenter() {
     );
   const uploadItem = (item: Material) =>
     upload.mutate(
-      { threadId: item.thread_id, path: item.path },
+      {
+        threadId: item.thread_id,
+        path: item.path,
+        url: previewURLOf(item),
+      },
       {
         onSuccess: () => toast.success("成功上传文件到知识库"),
         onError: (e) => toast.error(e.message),

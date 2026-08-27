@@ -1,14 +1,17 @@
 from types import SimpleNamespace
 
 import pytest
+from starlette.requests import Request
 
 from app.gateway.routers.materials import (
     KNOWLEDGE_BASE_ID,
     _file_type,
     _presented_paths,
+    _preview_url,
     _scan_output_files,
     _upload_args,
     _upload_tool,
+    _validate_preview_url,
 )
 
 
@@ -45,53 +48,53 @@ def test_scan_output_files_includes_files_but_skips_internal_dirs(tmp_path) -> N
     assert [path for path, _ in paths] == ["/mnt/user-data/outputs/静夜思.md"]
 
 
-def test_upload_args_requires_knowledge_and_file_fields() -> None:
+def test_upload_args_requires_knowledge_and_url_fields() -> None:
     tool = SimpleNamespace(
         args_schema=SimpleNamespace(
             model_fields={
                 "kb_id": object(),
-                "file_path": object(),
+                "url": object(),
                 "enable_multimodel": object(),
             }
         )
     )
 
-    assert _upload_args(tool, "/mnt/user-data/outputs/report.pdf") == {
+    assert _upload_args(tool, "https://deerflow.example/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.pdf") == {
         "kb_id": KNOWLEDGE_BASE_ID,
-        "file_path": "/mnt/user-data/outputs/report.pdf",
+        "url": "https://deerflow.example/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.pdf",
         "enable_multimodel": True,
     }
 
 
-def test_upload_args_fails_closed_without_file_field() -> None:
+def test_upload_args_fails_closed_without_url_field() -> None:
     tool = SimpleNamespace(args_schema=SimpleNamespace(model_fields={"knowledge_base_id": object()}))
 
     with pytest.raises(ValueError, match="工具参数不匹配"):
-        _upload_args(tool, "/mnt/user-data/outputs/report.pdf")
+        _upload_args(tool, "https://deerflow.example/report.pdf")
 
 
 def test_upload_args_supports_pydantic_v1_schema() -> None:
-    tool = SimpleNamespace(args_schema=SimpleNamespace(__fields__={"kb_id": object(), "file_path": object()}))
+    tool = SimpleNamespace(args_schema=SimpleNamespace(__fields__={"kb_id": object(), "url": object()}))
 
-    assert _upload_args(tool, "/mnt/user-data/outputs/report.pdf") == {
+    assert _upload_args(tool, "https://deerflow.example/report.pdf") == {
         "kb_id": KNOWLEDGE_BASE_ID,
-        "file_path": "/mnt/user-data/outputs/report.pdf",
+        "url": "https://deerflow.example/report.pdf",
     }
 
 
 def test_upload_args_supports_tool_args_fallback() -> None:
-    tool = SimpleNamespace(args={"dataset": object(), "upload_file": object()})
+    tool = SimpleNamespace(args={"dataset": object(), "source_url": object()})
 
-    assert _upload_args(tool, "/mnt/user-data/outputs/report.pdf") == {
+    assert _upload_args(tool, "https://deerflow.example/report.pdf") == {
         "dataset": KNOWLEDGE_BASE_ID,
-        "upload_file": "/mnt/user-data/outputs/report.pdf",
+        "source_url": "https://deerflow.example/report.pdf",
     }
 
 
-def test_upload_tool_uses_create_knowledge_from_file(monkeypatch) -> None:
+def test_upload_tool_uses_hyphenated_create_knowledge_from_url(monkeypatch) -> None:
     upload_tool = SimpleNamespace(
-        name="shopProduct-server_weknora-create-knowledge-from-file",
-        args_schema=SimpleNamespace(model_fields={"kb_id": object(), "file_path": object(), "enable_multimodel": object()}),
+        name="shopProduct-server_weknora-create-knowledge-from-url",
+        args_schema=SimpleNamespace(model_fields={"kb_id": object(), "url": object(), "enable_multimodel": object()}),
     )
     monkeypatch.setattr(
         "app.gateway.routers.materials.get_cached_mcp_tools",
@@ -99,3 +102,42 @@ def test_upload_tool_uses_create_knowledge_from_file(monkeypatch) -> None:
     )
 
     assert _upload_tool() is upload_tool
+
+
+def test_validate_preview_url_accepts_current_material_url(monkeypatch) -> None:
+    url = "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/%E9%9D%99%E5%A4%9C%E6%80%9D.md?artifact_token=signed"
+    monkeypatch.setattr(
+        "app.gateway.routers.materials.verify_artifact_token",
+        lambda token: {"thread_id": "thread-1", "path": "/mnt/user-data/outputs/静夜思.md"} if token == "signed" else None,
+    )
+
+    assert _validate_preview_url("thread-1", "/mnt/user-data/outputs/静夜思.md", url, "deerflow.example") == url
+
+
+def test_preview_url_uses_gateway_request_host(monkeypatch) -> None:
+    monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
+    request = Request({"type": "http", "scheme": "http", "server": ("127.0.0.1", 8001), "path": "/api/materials", "headers": [(b"host", b"127.0.0.1:8001")]})
+
+    url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
+
+    assert url == "http://127.0.0.1:8001/api/public/artifacts/thread-1/mnt/user-data/outputs/%E9%9D%99%E5%A4%9C%E6%80%9D.md?artifact_token=signed"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://other.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed",
+        "https://deerflow.example/api/public/artifacts/other/mnt/user-data/outputs/report.pdf?artifact_token=signed",
+        "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/other.pdf?artifact_token=signed",
+        "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=invalid",
+        "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed&other=value",
+        "https://[invalid/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed",
+    ],
+)
+def test_validate_preview_url_rejects_other_hosts_threads_files_and_tokens(monkeypatch, url: str) -> None:
+    monkeypatch.setattr(
+        "app.gateway.routers.materials.verify_artifact_token",
+        lambda token: {"thread_id": "thread-1", "path": "/mnt/user-data/outputs/report.pdf"} if token == "signed" else None,
+    )
+    with pytest.raises(ValueError, match="预览 URL"):
+        _validate_preview_url("thread-1", "/mnt/user-data/outputs/report.pdf", url, "deerflow.example")

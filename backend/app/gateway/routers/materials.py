@@ -7,10 +7,12 @@ import mimetypes
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from app.gateway.artifact_access import create_artifact_token, verify_artifact_token
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_run_event_store, get_run_store, get_thread_store
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
@@ -23,7 +25,7 @@ from deerflow.workspace_changes.scanner import EXCLUDED_DIR_NAMES, is_sensitive_
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
 KNOWLEDGE_SERVERS = ("shopProduct-server", "weknora")
-KNOWLEDGE_UPLOAD_TOOL = "create-knowledge-from-file"
+KNOWLEDGE_UPLOAD_TOOL = "create-knowledge-from-url"
 KNOWLEDGE_BASE_ID = "5cf6bd7f-6aae-4304-b8a2-a5e289912445"
 FAVORITES_KEY = "deerflow_material_favorites"
 
@@ -198,6 +200,7 @@ async def _collect(request: Request, *, q: str, type_key: str, favorites_only: b
                     "favorite": favorite,
                     "status": status,
                     "run_id": run_id,
+                    "preview_url": _preview_url(request, thread_id, path, owner),
                 }
             )
     result.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
@@ -241,7 +244,7 @@ def _knowledge_tools(tools: list[Any]) -> list[Any]:
 
 
 def _related_knowledge_tools(tools: list[Any]) -> list[Any]:
-    return [tool for tool in tools if any(token in getattr(tool, "name", "").lower() for token in ("weknora", "knowledge", "file"))]
+    return [tool for tool in tools if any(token in getattr(tool, "name", "").lower() for token in ("weknora", "knowledge", "url"))]
 
 
 def _schema_fields(tool: Any) -> dict[str, Any]:
@@ -259,7 +262,7 @@ def _upload_tool() -> Any | None:
         candidates.sort(key=lambda tool: (getattr(tool, "name", "") != KNOWLEDGE_UPLOAD_TOOL, getattr(tool, "name", "")))
         for tool in candidates:
             try:
-                _upload_args(tool, "/mnt/user-data/outputs/material")
+                _upload_args(tool, "https://deerflow.example/api/threads/thread/artifacts/mnt/user-data/outputs/material")
             except ValueError:
                 continue
             return tool
@@ -275,10 +278,10 @@ def _upload_tool() -> Any | None:
     return find(get_cached_mcp_tools())
 
 
-def _upload_args(tool: Any, path: str) -> dict[str, Any]:
+def _upload_args(tool: Any, url: str) -> dict[str, Any]:
     fields = _schema_fields(tool)
     values: dict[str, Any] = {}
-    knowledge_field = file_field = False
+    knowledge_field = url_field = False
     for name in fields:
         key = name.lower()
         if "knowledge" in key or key in {"kb_id", "kbid", "dataset_id", "dataset", "space_id", "space", "collection_id"}:
@@ -286,15 +289,44 @@ def _upload_args(tool: Any, path: str) -> dict[str, Any]:
             knowledge_field = True
         elif key in {"enable_multimodel", "enable_multimodal"}:
             values[name] = True
-        elif any(token in key for token in ("path", "file", "document", "content", "attachment", "source", "upload")) and "url" not in key:
-            values[name] = path
-            file_field = True
-        elif "name" in key or "title" in key:
-            values[name] = Path(path).name
-    if not knowledge_field or not file_field:
+        elif "url" in key:
+            values[name] = url
+            url_field = True
+    if not knowledge_field or not url_field:
         field_names = ", ".join(fields) or "无"
         raise ValueError(f"知识库工具参数不匹配，当前参数: {field_names}")
     return values
+
+
+def _validate_preview_url(thread_id: str, path: str, url: str, request_host: str) -> str:
+    try:
+        parsed = urlsplit(url)
+        username = parsed.username
+    except ValueError as exc:
+        raise ValueError("预览 URL 与当前资料不匹配") from exc
+    expected_path = f"/api/public/artifacts/{thread_id}/{path.lstrip('/')}"
+    query = parse_qs(parsed.query)
+    tokens = query.get("artifact_token", [])
+    payload = verify_artifact_token(tokens[0]) if len(tokens) == 1 else None
+    if (
+        parsed.scheme not in {"http", "https"}
+        or parsed.netloc.lower() != request_host.lower()
+        or unquote(parsed.path) != expected_path
+        or parsed.fragment
+        or username is not None
+        or set(query) != {"artifact_token"}
+        or payload is None
+        or payload["thread_id"] != thread_id
+        or payload["path"] != path
+    ):
+        raise ValueError("预览 URL 与当前资料不匹配")
+    return url
+
+
+def _preview_url(request: Request, thread_id: str, path: str, user_id: str | None) -> str:
+    token = create_artifact_token(thread_id=thread_id, path=path, user_id=user_id or "default")
+    encoded_path = quote(path.lstrip("/"), safe="/")
+    return f"{str(request.base_url).rstrip('/')}/api/public/artifacts/{quote(thread_id, safe='')}/{encoded_path}?artifact_token={quote(token, safe='')}"
 
 
 @router.get("/capabilities")
@@ -318,7 +350,7 @@ async def material_capabilities(request: Request):
 
 @router.post("/{thread_id}/upload-knowledge")
 @require_permission("threads", "read", owner_check=True, require_existing=True)
-async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Query(...)) -> KnowledgeUploadResponse:
+async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Query(...), url: str = Query(...)) -> KnowledgeUploadResponse:
     user = getattr(request.state, "user", None)
     if getattr(user, "system_role", None) != "admin":
         raise HTTPException(status_code=403, detail="仅管理员可以上传知识库")
@@ -331,6 +363,10 @@ async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Qu
     )
     if material is None or material["status"] != "ready":
         raise HTTPException(status_code=404, detail="Material not found")
+    try:
+        preview_url = _validate_preview_url(str(thread_id), path, url, request.headers.get("host", ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     config = get_extensions_config()
     if not any((config.mcp_servers.get(name) and config.mcp_servers[name].enabled) for name in KNOWLEDGE_SERVERS):
         raise HTTPException(status_code=409, detail="知识库 MCP 未配置或未启用")
@@ -350,7 +386,7 @@ async def upload_knowledge(thread_id: ThreadId, request: Request, path: str = Qu
             detail = f"未发现 MCP 工具 {KNOWLEDGE_UPLOAD_TOOL}，请检查知识库 MCP 的工具发现状态"
         raise HTTPException(status_code=503, detail=detail)
     try:
-        upload_args = _upload_args(tool, path)
+        upload_args = _upload_args(tool, preview_url)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     try:

@@ -41,9 +41,11 @@ export async function setMaterialFavorite(
 export async function uploadMaterialToKnowledge(
   threadId: string,
   path: string,
+  url: string,
 ) {
+  const query = new URLSearchParams({ path, url });
   const response = await fetch(
-    `${base()}/${encodeURIComponent(threadId)}/upload-knowledge?path=${encodeURIComponent(path)}`,
+    `${base()}/${encodeURIComponent(threadId)}/upload-knowledge?${query}`,
     { method: "POST" },
   );
   const data = await response.json().catch(() => ({}));

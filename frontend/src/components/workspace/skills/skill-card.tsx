@@ -207,7 +207,7 @@ export function SkillCard({
   return (
     <>
       <Card
-        className={`skill-module-card group relative h-[176px] cursor-pointer gap-0 overflow-hidden rounded-[12px] border-[#d8e5ef] py-0 shadow-[0_1px_2px_rgba(15,56,94,0.05)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-[3px] hover:border-[#9bc9ed] hover:shadow-[0_16px_34px_rgba(38,91,139,0.12)] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-sky-300 ${skill.enabled ? "" : "opacity-90"}`}
+        className={`skill-module-card group relative h-[176px] cursor-pointer gap-0 overflow-hidden rounded-[12px] border-[#d8e5ef] py-0 shadow-[0_1px_2px_rgba(15,56,94,0.05)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-[3px] hover:border-[#9bc9ed] hover:shadow-[0_16px_34px_rgba(38,91,139,0.12)] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-sky-300 dark:bg-sidebar-accent dark:hover:bg-accent ${skill.enabled ? "" : "opacity-90"}`}
         style={
           {
             "--skill-accent": skillAccent,

@@ -242,7 +242,7 @@ export function LocalAgentCard({
   return (
     <>
       <Card
-        className={`group relative h-44 min-w-0 cursor-pointer gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] ${selected ? "ring-2 ring-sky-400" : ""}`}
+        className={`group relative h-44 min-w-0 cursor-pointer gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] dark:bg-sidebar-accent dark:hover:bg-accent ${selected ? "ring-2 ring-sky-400" : ""}`}
         role={canViewDetails ? "button" : undefined}
         tabIndex={canViewDetails ? 0 : undefined}
         onClick={handleCardClick}

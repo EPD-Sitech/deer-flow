@@ -48,19 +48,19 @@ export function LocalAgentOverviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 overflow-hidden rounded-2xl border-[#d5e3ee] bg-white p-0 shadow-[0_30px_80px_rgba(12,38,61,0.25)] sm:top-[40%] sm:max-w-[700px] dark:border-slate-700 dark:bg-slate-950">
-        <DialogHeader className="flex-row items-center gap-3 bg-[#eff6fb] px-6 py-5 pr-14 text-left dark:bg-slate-900">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 overflow-hidden rounded-2xl border-border bg-popover p-0 shadow-[0_30px_80px_rgb(0_0_0_/_0.3)] sm:top-[40%] sm:max-w-[700px]">
+        <DialogHeader className="flex-row items-center gap-3 border-b border-border bg-muted/40 px-6 py-5 pr-14 text-left">
           <AgentAvatar
             name={agent.name}
             scope={scope}
             alt=""
-            className="size-16 shrink-0 rounded-full border-2 border-white object-cover shadow-sm dark:border-slate-700"
+            className="size-16 shrink-0 rounded-full border-2 border-background object-cover shadow-sm"
           />
           <div className="min-w-0">
-            <DialogTitle className="truncate text-xl text-[#173a5b] dark:text-slate-100">
+            <DialogTitle className="truncate text-xl text-foreground">
               {displayName}
             </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-[#71869a] dark:text-slate-400">
+            <DialogDescription className="mt-1 text-xs text-muted-foreground">
               {categoryLabel} · {scopeLabel}
             </DialogDescription>
           </div>
@@ -68,10 +68,10 @@ export function LocalAgentOverviewDialog({
 
         <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto px-6 py-5">
           <section>
-            <h3 className="text-xs font-semibold text-[#294a67] dark:text-slate-200">
+            <h3 className="text-xs font-semibold text-foreground">
               {zh ? "专家简介" : "About this expert"}
             </h3>
-            <p className="mt-2 text-xs leading-6 text-[#60768a] dark:text-slate-300">
+            <p className="mt-2 text-xs leading-6 text-muted-foreground">
               {agent.description ||
                 (zh
                   ? "为复杂业务任务提供专业分析与执行支持。"
@@ -80,7 +80,7 @@ export function LocalAgentOverviewDialog({
           </section>
 
           <section className="mt-4">
-            <h3 className="text-xs font-semibold text-[#294a67] dark:text-slate-200">
+            <h3 className="text-xs font-semibold text-foreground">
               {zh ? "核心能力" : "Core capabilities"}
             </h3>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -88,7 +88,11 @@ export function LocalAgentOverviewDialog({
                 <span
                   key={capability}
                   className="rounded-full border px-2.5 py-1 text-[10px] font-medium"
-                  style={{ borderColor: `${accent}35`, color: accent }}
+                  style={{
+                    backgroundColor: `${accent}14`,
+                    borderColor: `${accent}55`,
+                    color: accent,
+                  }}
                 >
                   {capability}
                 </span>
@@ -98,7 +102,7 @@ export function LocalAgentOverviewDialog({
 
           {guideQuestions.length > 0 && (
             <section className="mt-5">
-              <h3 className="text-xs font-semibold text-[#294a67] dark:text-slate-200">
+              <h3 className="text-xs font-semibold text-foreground">
                 {zh ? "可以这样问" : "Try asking"}
               </h3>
               <div className="mt-2 space-y-2">
@@ -106,7 +110,7 @@ export function LocalAgentOverviewDialog({
                   <button
                     key={`${guideQuestion.question}:${guideQuestion.prompt ?? ""}`}
                     type="button"
-                    className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-[#e3ebf2] bg-[#f8fafc] px-3.5 text-left text-xs text-[#60768a] transition-colors hover:border-[#b9d4e8] hover:bg-[#f1f7fb] hover:text-[#356b96] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                    className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-border bg-muted/35 px-3.5 text-left text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
                     onClick={() =>
                       onStartChat(
                         guideQuestion.prompt ?? guideQuestion.question,
@@ -124,7 +128,7 @@ export function LocalAgentOverviewDialog({
           <div className="mt-5 flex justify-end">
             <button
               type="button"
-              className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-[#357df3] px-4 text-xs font-medium text-white shadow-[0_8px_18px_rgba(53,125,243,0.24)] transition-colors hover:bg-[#256fe3]"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg px-4 text-xs font-medium shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
               onClick={() => onStartChat()}
             >
               <MessageSquareIcon className="size-4" />

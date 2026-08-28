@@ -401,51 +401,53 @@ export function MaterialsCenter() {
 
   return (
     <div className="bg-background text-foreground flex size-full flex-col">
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold">资料中心</h1>
-          <p className="text-muted-foreground mt-0.5 text-sm">
+      <div className="bg-card shrink-0 border-b">
+        <header className="px-5 py-4 sm:px-6">
+          <h1 className="text-2xl leading-tight font-semibold text-[#173a5b] dark:text-slate-100">
+            资料中心
+          </h1>
+          <p className="mt-1 text-sm text-[#71869a] dark:text-slate-400">
             按会话管理 Agent 明确呈现的文档、表格与产出物，便于追溯与复用
           </p>
+        </header>
+        <div className="flex flex-wrap items-center gap-3 border-t border-[#edf2f6] px-5 py-3 sm:px-6 dark:border-slate-800">
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger className="bg-background h-8 w-32 rounded-lg text-xs">
+              <SelectValue placeholder="选择类型" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(typeLabels).map(([key, label]) => (
+                <SelectItem key={key} value={key} className="text-xs">
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <label className="relative w-full sm:w-72">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#89a0b3] dark:text-slate-500" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索文件"
+              className="bg-background h-8 rounded-lg border-[#d8e5ef] pl-9 text-xs text-[#34495e] shadow-none placeholder:text-[#9badbf] focus-visible:border-[#86bae1] focus-visible:ring-2 focus-visible:ring-sky-200/50 dark:border-slate-700 dark:text-slate-100"
+            />
+          </label>
+          <label className="text-muted-foreground inline-flex h-8 cursor-pointer items-center gap-1.5 px-2 text-xs">
+            <input
+              type="checkbox"
+              checked={favoritesOnly}
+              onChange={(event) => setFavoritesOnly(event.target.checked)}
+              className="accent-primary size-3.5"
+            />
+            我的收藏
+          </label>
+          <span className="text-muted-foreground ml-auto px-1 text-[11px] whitespace-nowrap">
+            {groups.length} 个会话 · {data?.total ?? 0} 个文件
+          </span>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-[1440px]">
-          <div className="bg-background relative mb-4 flex flex-wrap items-center gap-3 rounded-lg border p-3 shadow-xs">
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="h-8 w-32 text-xs">
-                <SelectValue placeholder="选择类型" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(typeLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key} className="text-xs">
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <label className="relative w-full sm:w-60">
-              <SearchIcon className="text-muted-foreground absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索文件"
-                className="h-8 pl-8 text-xs"
-              />
-            </label>
-            <label className="text-muted-foreground inline-flex cursor-pointer items-center gap-1.5 px-2 text-xs">
-              <input
-                type="checkbox"
-                checked={favoritesOnly}
-                onChange={(event) => setFavoritesOnly(event.target.checked)}
-                className="accent-primary size-3.5"
-              />
-              我的收藏
-            </label>
-            <span className="text-muted-foreground ml-auto px-1 text-xs whitespace-nowrap">
-              {groups.length} 个会话 · {data?.total ?? 0} 个文件
-            </span>
-          </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+        <div>
           {error && (
             <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
               资料加载失败，请刷新重试。
@@ -460,7 +462,7 @@ export function MaterialsCenter() {
               没有找到匹配的资料，请调整搜索或筛选条件。
             </div>
           ) : (
-            <div className="bg-background overflow-x-auto rounded-lg border shadow-xs">
+            <div className="bg-card dark:bg-sidebar-accent overflow-x-auto rounded-lg border shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)]">
               <div className="text-foreground bg-muted/30 materials-grid hidden min-w-[900px] items-center gap-3 border-b px-5 py-3 text-sm font-semibold md:grid">
                 <span />
                 <span>名称</span>
@@ -476,7 +478,7 @@ export function MaterialsCenter() {
                     key={group.threadId}
                     className="border-border border-b last:border-0"
                   >
-                    <div className="bg-muted/20 flex items-center gap-2 px-4 py-3.5">
+                    <div className="bg-muted/30 flex items-center gap-2 px-4 py-3.5">
                       <button
                         type="button"
                         onClick={() =>
@@ -511,7 +513,7 @@ export function MaterialsCenter() {
                         {group.items.map((item) => (
                           <div
                             key={item.id}
-                            className="materials-grid hover:bg-muted/30 grid items-center gap-3 border-t border-dashed px-5 py-2.5 transition"
+                            className="materials-grid hover:bg-accent grid items-center gap-3 border-t border-dashed px-5 py-2.5 transition-colors"
                           >
                             <span className="relative left-7">
                               <MaterialIcon item={item} />

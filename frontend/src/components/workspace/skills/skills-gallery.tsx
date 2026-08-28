@@ -161,9 +161,9 @@ export function SkillsGallery() {
     error instanceof SkillRequestError && error.isAdminRequired;
 
   return (
-    <div className="flex size-full flex-col">
+    <div className="bg-background flex size-full min-w-0 flex-col">
       {/* 页面头部 */}
-      <div className="shrink-0 border-b border-border bg-[var(--gp-surface-from)]">
+      <div className="bg-card shrink-0 border-b">
         <header className="flex flex-col gap-4 px-5 py-4 sm:px-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h1 className="text-[24px] leading-tight font-semibold text-[#173a5b] dark:text-slate-100">
@@ -177,7 +177,7 @@ export function SkillsGallery() {
             <div className="relative min-w-0 flex-1 sm:w-[280px] xl:w-[320px]">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#89a0b3] dark:text-slate-500" />
               <Input
-                className="h-9 rounded-[8px] border-[#d8e5ef] bg-white pl-9 text-xs text-[#34495e] shadow-none placeholder:text-[#9badbf] focus-visible:border-[#86bae1] focus-visible:ring-2 focus-visible:ring-sky-200/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                className="bg-background h-9 rounded-lg border-[#d8e5ef] pl-9 text-xs text-[#34495e] shadow-none placeholder:text-[#9badbf] focus-visible:border-[#86bae1] focus-visible:ring-2 focus-visible:ring-sky-200/50 dark:border-slate-700 dark:text-slate-100"
                 placeholder="搜索技能..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
@@ -187,14 +187,14 @@ export function SkillsGallery() {
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
                   variant="outline"
-                  className="h-9 flex-1 rounded-[8px] border-[#d8e5ef] bg-white px-3 text-xs text-[#49677f] shadow-none hover:bg-[#f3f8fc] hover:text-[#274f72] sm:flex-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  className="h-9 shrink-0 rounded-lg px-3 text-xs"
                   onClick={() => setImportDialogOpen(true)}
                 >
-                  <UploadIcon className="mr-1.5 size-3.5" />
+                  <UploadIcon className="size-3.5" />
                   导入
                 </Button>
                 <Button
-                  className="h-9 flex-1 rounded-[8px] bg-[linear-gradient(145deg,#2587ea,#419bff)] px-3 text-xs text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] hover:bg-[linear-gradient(145deg,#2587ea,#419bff)] hover:opacity-95 sm:flex-none"
+                  className="h-9 flex-1 rounded-lg bg-[#2587ea] px-3 text-xs text-white shadow-[0_7px_16px_rgba(37,130,234,0.24)] hover:bg-[#1778d8] sm:flex-none"
                   onClick={() => setCreateDialogOpen(true)}
                 >
                   <PlusIcon className="mr-1.5 size-3.5" />
@@ -209,44 +209,35 @@ export function SkillsGallery() {
       {/* 分类筛选 + scope 筛选 + 数量 */}
       <div className="flex shrink-0 flex-col gap-3 border-b border-[#edf2f6] px-5 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between dark:border-slate-800">
         <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
-          <button
-            type="button"
-            onClick={() => setCategoryFilter("all")}
-            className={`h-8 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-xs font-medium transition-colors ${
-              categoryFilter === "all"
-                ? "border-[#d2e3f1] bg-[#edf6ff] font-semibold text-[#1673c7] shadow-[0_2px_8px_rgba(35,83,125,0.08)] dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                : "border-transparent bg-transparent text-[#75879a] hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            }`}
-          >
-            全部
-            <span className="ml-1 rounded-full bg-white/70 px-1.5 text-[10px] font-semibold text-[#5f7890] dark:bg-slate-800 dark:text-slate-300">
-              {categoryCounts.all ?? 0}
-            </span>
-          </button>
-          {SKILL_CATEGORIES.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              onClick={() => setCategoryFilter(category.id)}
-              className={`h-8 shrink-0 cursor-pointer rounded-[7px] border px-[9px] text-xs font-medium transition-colors ${
-                categoryFilter === category.id
-                  ? "border-[#d2e3f1] bg-[#edf6ff] font-semibold text-[#1673c7] shadow-[0_2px_8px_rgba(35,83,125,0.08)] dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                  : "border-transparent bg-transparent text-[#75879a] hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-              }`}
-            >
-              {category.label}
-              <span className="ml-1 rounded-full bg-white/70 px-1.5 text-[10px] font-semibold text-[#5f7890] dark:bg-slate-800 dark:text-slate-300">
-                {categoryCounts[category.id] ?? 0}
-              </span>
-            </button>
-          ))}
+          {[{ id: "all", label: "全部" }, ...SKILL_CATEGORIES].map(
+            (category) => {
+              const active = categoryFilter === category.id;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(category.id)}
+                  className={
+                    active
+                      ? "h-8 shrink-0 cursor-pointer rounded-md border border-[#d2e3f1] bg-[#edf6ff] px-[9px] text-xs font-semibold text-[#1673c7] shadow-sm dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                      : "h-8 shrink-0 cursor-pointer rounded-md border border-transparent px-[9px] text-xs font-medium text-[#75879a] transition-colors hover:bg-[#f1f6fa] hover:text-[#3e6585] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  }
+                >
+                  {category.label}
+                  <span className="ml-1 opacity-65">
+                    {categoryCounts[category.id] ?? 0}
+                  </span>
+                </button>
+              );
+            },
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 xl:justify-end">
           <span className="shrink-0 text-[11px] text-[#8295a7] dark:text-slate-400">
             {filteredSkills.length} 个技能
           </span>
-          <div className="inline-flex h-8 items-center gap-0.5 rounded-[8px] border border-[#d8e5ef] bg-[#f6f8fb] p-0.5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="inline-flex h-8 items-center gap-0.5 rounded-lg border border-[#d8e5ef] bg-[#f6f8fb] p-0.5 dark:border-slate-700 dark:bg-slate-900">
             {(
               [
                 ["all", "全部"],
@@ -258,11 +249,11 @@ export function SkillsGallery() {
                 key={value}
                 type="button"
                 onClick={() => setScopeFilter(value)}
-                className={`h-6 cursor-pointer rounded-[6px] px-2.5 text-[10px] font-medium transition-colors ${
+                className={
                   scopeFilter === value
-                    ? "bg-white text-[#2376ba] shadow-[0_1px_5px_rgba(37,84,124,0.13)] dark:bg-slate-800 dark:text-sky-300"
-                    : "text-[#71869a] hover:text-[#365a78] dark:text-slate-400 dark:hover:text-slate-100"
-                }`}
+                    ? "h-6 cursor-pointer rounded-md bg-white px-2.5 text-[10px] font-medium text-[#2376ba] shadow-sm dark:bg-slate-800 dark:text-sky-300"
+                    : "h-6 cursor-pointer rounded-md px-2.5 text-[10px] font-medium text-[#71869a] hover:text-[#365a78] dark:text-slate-400 dark:hover:text-slate-100"
+                }
               >
                 {label}
               </button>
@@ -273,7 +264,7 @@ export function SkillsGallery() {
 
       {/* 批量操作工具栏 */}
       {selectedSkills.size > 0 && (
-        <div className="flex items-center gap-3 border-b border-border bg-[var(--gp-surface-from)] px-5 py-2 sm:px-6">
+        <div className="bg-muted/30 border-border flex items-center gap-3 border-b px-5 py-2 sm:px-6">
           <span className="text-text-secondary text-sm font-medium">
             已选择 {selectedSkills.size} 个
           </span>
@@ -334,7 +325,7 @@ export function SkillsGallery() {
             {error.message}
           </div>
         ) : filteredSkills.length === 0 ? (
-          <div className="mx-auto flex h-64 max-w-2xl flex-col items-center justify-center gap-4 rounded-[14px] border border-dashed border-[#cadbe8] bg-[var(--gp-surface-from)] px-8 text-center dark:border-slate-700">
+          <div className="bg-card mx-auto flex h-64 max-w-2xl flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-[#cadbe8] px-8 text-center dark:border-slate-700">
             <div className="flex h-14 w-14 items-center justify-center rounded-full border border-sky-200/80 bg-[#eef7ff] shadow-[0_12px_24px_-18px_rgba(39,96,201,0.45)] dark:border-sky-800 dark:bg-sky-950/60">
               <PuzzleIcon className="text-primary h-8 w-8" />
             </div>
@@ -349,7 +340,7 @@ export function SkillsGallery() {
             {canManage && (
               <Button
                 variant="outline"
-                className="text-text hover:text-text mt-2 rounded-[8px] border-sky-200 bg-[var(--gp-surface-from)] hover:bg-[var(--gp-surface-from)]"
+                className="mt-2 rounded-lg border-sky-200"
                 onClick={() => setCreateDialogOpen(true)}
               >
                 <PlusIcon className="mr-1.5 h-4 w-4" />
@@ -358,14 +349,14 @@ export function SkillsGallery() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3.5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
             {filteredSkills.map((skill) => (
               <SkillCard
                 key={skill.name}
                 skill={skill}
                 selected={selectedSkills.has(skill.name)}
                 onToggleSelect={
-                  skill.can_manage ?? skill.editable
+                  (skill.can_manage ?? skill.editable)
                     ? () => toggleSelect(skill.name)
                     : undefined
                 }

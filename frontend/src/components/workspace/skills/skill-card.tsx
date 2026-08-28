@@ -43,10 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { SKILL_CATEGORIES } from "@/core/skills/categories";
-import {
-  useDeleteSkill,
-  useUpdateSkillCategory,
-} from "@/core/skills/extended";
+import { useDeleteSkill, useUpdateSkillCategory } from "@/core/skills/extended";
 import { exportInstalledSkill } from "@/core/skills/extended";
 import { useEnableSkill } from "@/core/skills/hooks";
 import type { Skill } from "@/core/skills/type";
@@ -127,7 +124,9 @@ export function SkillCard({
   const categoryLabel =
     SKILL_CATEGORIES.find((item) => item.id === skillCategory)?.label ?? "其他";
   const metaLabel =
-    skill.name !== displayName ? skill.name : (skill.category_label ?? categoryLabel);
+    skill.name !== displayName
+      ? skill.name
+      : (skill.category_label ?? categoryLabel);
   const displayTags = Array.from(new Set(skill.tags ?? [])).slice(0, 2);
   const canManage = (skill.can_manage ?? skill.editable) && isAdmin;
 
@@ -207,7 +206,7 @@ export function SkillCard({
   return (
     <>
       <Card
-        className={`skill-module-card group relative h-[176px] cursor-pointer gap-0 overflow-hidden rounded-[12px] border-[#d8e5ef] py-0 shadow-[0_1px_2px_rgba(15,56,94,0.05)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-[3px] hover:border-[#9bc9ed] hover:shadow-[0_16px_34px_rgba(38,91,139,0.12)] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-sky-300 dark:bg-sidebar-accent dark:hover:bg-accent ${skill.enabled ? "" : "opacity-90"}`}
+        className={`skill-module-card group dark:bg-sidebar-accent dark:hover:bg-accent relative h-44 cursor-pointer gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-sky-300 ${skill.enabled ? "" : "opacity-90"}`}
         style={
           {
             "--skill-accent": skillAccent,
@@ -245,7 +244,7 @@ export function SkillCard({
             </div>
             <div className="min-w-0">
               <h2
-                className={`truncate text-[12.5px] leading-5 font-semibold ${
+                className={`truncate text-[13px] leading-5 font-semibold ${
                   skill.enabled
                     ? "text-[#173a5b] dark:text-slate-100"
                     : "text-[#7e90a2] dark:text-slate-400"

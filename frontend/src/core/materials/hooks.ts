@@ -41,15 +41,8 @@ export function useMaterialActions() {
     onSuccess: refresh,
   });
   const upload = useMutation({
-    mutationFn: ({
-      threadId,
-      path,
-      url,
-    }: {
-      threadId: string;
-      path: string;
-      url: string;
-    }) => uploadMaterialToKnowledge(threadId, path, url),
+    mutationFn: ({ threadId, path }: { threadId: string; path: string }) =>
+      uploadMaterialToKnowledge(threadId, path),
     onSuccess: refresh,
   });
   return { favorite, upload };

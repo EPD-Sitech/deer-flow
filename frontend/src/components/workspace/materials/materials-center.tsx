@@ -141,18 +141,11 @@ function MaterialIcon({ item }: { item: Material }) {
   );
 }
 
-function previewURLOf(item: Material) {
-  const artifactURL = new URL(
-    urlOfArtifact({ filepath: item.path, threadId: item.thread_id }),
-    window.location.origin,
-  );
-  return item.preview_url
-    ? new URL(item.preview_url, artifactURL.origin).toString()
-    : artifactURL.toString();
-}
-
 function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
-  const url = previewURLOf(item);
+  const url = urlOfArtifact({
+    filepath: item.path,
+    threadId: item.thread_id,
+  });
   const { isCodeFile, language } = useMemo(
     () => checkCodeFile(item.path),
     [item.path],
@@ -399,7 +392,6 @@ export function MaterialsCenter() {
       {
         threadId: item.thread_id,
         path: item.path,
-        url: previewURLOf(item),
       },
       {
         onSuccess: () => toast.success("成功上传文件到知识库"),
@@ -558,23 +550,24 @@ export function MaterialsCenter() {
                                   <StarIcon className="size-4" />
                                 )}
                               </Button>
-                              {canUpload && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-muted-foreground size-7"
-                                  disabled={upload.isPending}
-                                  onClick={() => uploadItem(item)}
-                                  aria-label="上传到知识库"
-                                  title="上传到知识库"
-                                >
-                                  {upload.isPending ? (
-                                    <LoaderIcon className="size-4 animate-spin" />
-                                  ) : (
-                                    <ArrowUpFromLineIcon className="size-4" />
-                                  )}
-                                </Button>
-                              )}
+                              {canUpload &&
+                                item.name.toLowerCase().endsWith(".md") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-muted-foreground size-7"
+                                    disabled={upload.isPending}
+                                    onClick={() => uploadItem(item)}
+                                    aria-label="上传到知识库"
+                                    title="上传到知识库"
+                                  >
+                                    {upload.isPending ? (
+                                      <LoaderIcon className="size-4 animate-spin" />
+                                    ) : (
+                                      <ArrowUpFromLineIcon className="size-4" />
+                                    )}
+                                  </Button>
+                                )}
                             </div>
                           </div>
                         ))}

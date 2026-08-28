@@ -53,41 +53,6 @@ def test_get_artifact_reads_utf8_text_file_on_windows_locale(tmp_path, monkeypat
     assert response.headers["accept-ranges"] == "bytes"
 
 
-def test_public_artifact_uses_token_owner_and_file_binding(tmp_path, monkeypatch) -> None:
-    artifact_path = tmp_path / "静夜思.md"
-    artifact_path.write_text("床前明月光", encoding="utf-8")
-    seen = {}
-
-    def fake_resolve(_thread_id, _path, user_id=None):
-        seen["user_id"] = user_id
-        return artifact_path
-
-    monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", fake_resolve)
-    monkeypatch.setattr(
-        artifacts_router,
-        "verify_artifact_token",
-        lambda token: {"sub": "user-1", "thread_id": "thread-1", "path": "/mnt/user-data/outputs/静夜思.md"} if token == "signed" else None,
-    )
-
-    response = asyncio.run(artifacts_router.get_public_artifact("thread-1", "mnt/user-data/outputs/静夜思.md", "signed"))
-
-    assert isinstance(response, FileResponse)
-    assert seen["user_id"] == "user-1"
-
-
-def test_public_artifact_rejects_token_for_another_file(monkeypatch) -> None:
-    monkeypatch.setattr(
-        artifacts_router,
-        "verify_artifact_token",
-        lambda _token: {"sub": "user-1", "thread_id": "thread-1", "path": "/mnt/user-data/outputs/other.md"},
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(artifacts_router.get_public_artifact("thread-1", "mnt/user-data/outputs/静夜思.md", "signed"))
-
-    assert exc_info.value.status_code == 404
-
-
 @asynccontextmanager
 async def _allow_artifact_write(*_args, **_kwargs):
     yield

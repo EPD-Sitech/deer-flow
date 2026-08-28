@@ -36,7 +36,6 @@ def _default_route_authorization_config(monkeypatch):
         "/api/v1/auth/cas/login",
         "/api/v1/auth/cas/callback",
         "/api/v1/auth/cas/logout",
-        "/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf",
     ],
 )
 def test_public_paths(path: str):

@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from app.gateway.artifact_access import verify_artifact_token
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_run_manager
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
@@ -41,20 +40,6 @@ _SKILL_ARCHIVE_READ_CHUNK_SIZE = 64 * 1024
 MAX_EDITABLE_ARTIFACT_BYTES = 2 * 1024 * 1024
 _EDITABLE_OUTPUTS_PREFIX = "mnt/user-data/outputs/"
 _ARTIFACT_EDIT_TEMP_PREFIX = ".artifact-edit-"
-
-
-@router.get("/public/artifacts/{thread_id}/{path:path}", include_in_schema=False)
-async def get_public_artifact(thread_id: ThreadId, path: str, artifact_token: str, download: bool = False) -> Response:
-    """Serve one short-lived artifact URL to an external fetcher such as MCP."""
-    payload = verify_artifact_token(artifact_token)
-    requested_path = "/" + path.lstrip("/")
-    if payload is None or payload["thread_id"] != str(thread_id) or payload["path"] != requested_path:
-        raise HTTPException(status_code=404, detail="Artifact URL is invalid or expired")
-    actual_path = await asyncio.to_thread(resolve_thread_virtual_path, thread_id, requested_path, user_id=make_safe_user_id(payload["sub"]))
-    kind, mime_type = await asyncio.to_thread(_read_artifact_payload, actual_path, requested_path, download)
-    if kind == "file":
-        return FileResponse(path=actual_path, filename=actual_path.name, media_type=mime_type, headers=_build_attachment_headers(actual_path.name))
-    return FileResponse(path=actual_path, media_type=mime_type, headers={"Content-Disposition": _build_content_disposition("inline", actual_path.name)})
 
 
 class ArtifactUpdateRequest(BaseModel):

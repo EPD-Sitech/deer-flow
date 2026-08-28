@@ -1204,7 +1204,7 @@ After each run, DeerFlow records a workspace change summary for the run-owned `w
 
 Files presented through `present_files` remain part of the thread's artifact state, and the Web UI restores the artifact panel and selected document after a page refresh. The currently selected formal artifact is refreshed once when the run finishes so edits become visible without a manual reload. Existing UTF-8 text artifacts under `/mnt/user-data/outputs` can also be edited and explicitly saved from the panel on Unix and Windows while the thread is idle; saves use content revisions to prevent overwriting agent changes.
 
-The global materials center aggregates presented/generated files across the current user's sessions. Administrators with an enabled knowledge-base MCP can upload a material through `create-knowledge-from-url`; the center supplies a one-hour, file-bound preview URL so the MCP service can fetch the artifact without a browser session cookie.
+The global materials center aggregates presented/generated files across the current user's sessions. Administrators with an enabled knowledge-base MCP can upload UTF-8 Markdown materials through `create-knowledge-from-text`; the file name becomes the knowledge title and the Markdown source becomes its content.
 
 Text artifacts are streamed with HTTP byte-range support. The Web UI initially
 loads at most 1 MiB, shows the preview size when a file is larger, and waits for

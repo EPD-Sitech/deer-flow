@@ -12,7 +12,6 @@ export interface Material {
   favorite: boolean;
   status: "ready" | "missing";
   run_id: string;
-  preview_url?: string;
 }
 
 export interface MaterialsResponse {

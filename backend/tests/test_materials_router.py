@@ -1,17 +1,19 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 
 from app.gateway.routers.materials import (
     KNOWLEDGE_BASE_ID,
     _file_type,
     _presented_paths,
-    _preview_url,
+    _read_markdown,
     _scan_output_files,
     _upload_args,
     _upload_tool,
-    _validate_preview_url,
+    upload_knowledge,
 )
 
 
@@ -48,53 +50,96 @@ def test_scan_output_files_includes_files_but_skips_internal_dirs(tmp_path) -> N
     assert [path for path, _ in paths] == ["/mnt/user-data/outputs/静夜思.md"]
 
 
-def test_upload_args_requires_knowledge_and_url_fields() -> None:
+def test_upload_args_uses_markdown_title_and_content() -> None:
     tool = SimpleNamespace(
         args_schema=SimpleNamespace(
             model_fields={
                 "kb_id": object(),
-                "url": object(),
-                "enable_multimodel": object(),
+                "title": object(),
+                "content": object(),
             }
         )
     )
 
-    assert _upload_args(tool, "https://deerflow.example/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.pdf") == {
+    assert _upload_args(tool, title="静夜思", content="# 静夜思\n\n床前明月光") == {
         "kb_id": KNOWLEDGE_BASE_ID,
-        "url": "https://deerflow.example/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.pdf",
-        "enable_multimodel": True,
+        "title": "静夜思",
+        "content": "# 静夜思\n\n床前明月光",
     }
 
 
-def test_upload_args_fails_closed_without_url_field() -> None:
-    tool = SimpleNamespace(args_schema=SimpleNamespace(model_fields={"knowledge_base_id": object()}))
+def test_upload_args_omits_optional_status_and_tag_ids() -> None:
+    tool = SimpleNamespace(
+        args_schema=SimpleNamespace(
+            model_fields={
+                "kb_id": object(),
+                "title": object(),
+                "content": object(),
+                "status": object(),
+                "tag_ids": object(),
+            }
+        )
+    )
+
+    assert _upload_args(tool, title="静夜思", content="床前明月光") == {
+        "kb_id": KNOWLEDGE_BASE_ID,
+        "title": "静夜思",
+        "content": "床前明月光",
+    }
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"kb_id": object(), "content": object()},
+        {"kb_id": object(), "title": object()},
+    ],
+)
+def test_upload_args_fails_closed_without_title_or_content(fields) -> None:
+    tool = SimpleNamespace(args_schema=SimpleNamespace(model_fields=fields))
 
     with pytest.raises(ValueError, match="工具参数不匹配"):
-        _upload_args(tool, "https://deerflow.example/report.pdf")
+        _upload_args(tool, title="静夜思", content="床前明月光")
 
 
 def test_upload_args_supports_pydantic_v1_schema() -> None:
-    tool = SimpleNamespace(args_schema=SimpleNamespace(__fields__={"kb_id": object(), "url": object()}))
+    tool = SimpleNamespace(
+        args_schema=SimpleNamespace(
+            __fields__={
+                "kb_id": object(),
+                "title": object(),
+                "content": object(),
+            }
+        )
+    )
 
-    assert _upload_args(tool, "https://deerflow.example/report.pdf") == {
+    assert _upload_args(tool, title="静夜思", content="床前明月光") == {
         "kb_id": KNOWLEDGE_BASE_ID,
-        "url": "https://deerflow.example/report.pdf",
+        "title": "静夜思",
+        "content": "床前明月光",
     }
 
 
 def test_upload_args_supports_tool_args_fallback() -> None:
-    tool = SimpleNamespace(args={"dataset": object(), "source_url": object()})
+    tool = SimpleNamespace(args={"dataset": object(), "name": object(), "markdown": object()})
 
-    assert _upload_args(tool, "https://deerflow.example/report.pdf") == {
+    assert _upload_args(tool, title="静夜思", content="床前明月光") == {
         "dataset": KNOWLEDGE_BASE_ID,
-        "source_url": "https://deerflow.example/report.pdf",
+        "name": "静夜思",
+        "markdown": "床前明月光",
     }
 
 
-def test_upload_tool_uses_hyphenated_create_knowledge_from_url(monkeypatch) -> None:
+def test_upload_tool_uses_hyphenated_create_knowledge_from_text(monkeypatch) -> None:
     upload_tool = SimpleNamespace(
-        name="shopProduct-server_weknora-create-knowledge-from-url",
-        args_schema=SimpleNamespace(model_fields={"kb_id": object(), "url": object(), "enable_multimodel": object()}),
+        name="shopProduct-server_weknora-create-knowledge-from-text",
+        args_schema=SimpleNamespace(
+            model_fields={
+                "kb_id": object(),
+                "title": object(),
+                "content": object(),
+            }
+        ),
     )
     monkeypatch.setattr(
         "app.gateway.routers.materials.get_cached_mcp_tools",
@@ -104,88 +149,76 @@ def test_upload_tool_uses_hyphenated_create_knowledge_from_url(monkeypatch) -> N
     assert _upload_tool() is upload_tool
 
 
-def test_validate_preview_url_accepts_current_material_url(monkeypatch) -> None:
-    url = "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/%E9%9D%99%E5%A4%9C%E6%80%9D.md?artifact_token=signed"
+def test_read_markdown_returns_utf8_source(tmp_path) -> None:
+    path = tmp_path / "静夜思.md"
+    path.write_text("# 静夜思\n\n床前明月光", encoding="utf-8")
+
+    assert _read_markdown(path) == "# 静夜思\n\n床前明月光"
+
+
+def test_read_markdown_rejects_non_utf8_source(tmp_path) -> None:
+    path = tmp_path / "invalid.md"
+    path.write_bytes(b"\xff\xfe")
+
+    with pytest.raises(ValueError, match="UTF-8"):
+        _read_markdown(path)
+
+
+def test_upload_knowledge_rejects_non_markdown() -> None:
+    request = Request({"type": "http", "headers": []})
+    request.state.user = SimpleNamespace(id="user-1", system_role="admin")
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            upload_knowledge.__wrapped__(
+                "thread-1",
+                request,
+                path="/mnt/user-data/outputs/report.pdf",
+            )
+        )
+
+    assert exc_info.value.status_code == 400
+    assert ".md" in exc_info.value.detail
+
+
+def test_upload_knowledge_reads_markdown_and_invokes_text_tool(tmp_path, monkeypatch) -> None:
+    path = "/mnt/user-data/outputs/静夜思.md"
+    actual = tmp_path / "静夜思.md"
+    actual.write_text("# 静夜思\n\n床前明月光", encoding="utf-8")
+    request = Request({"type": "http", "headers": []})
+    request.state.user = SimpleNamespace(id="user-1", system_role="admin")
+    invoked = {}
+
+    async def collect(*_args, **_kwargs):
+        return [{"thread_id": "thread-1", "path": path, "status": "ready"}]
+
+    async def invoke(args):
+        invoked.update(args)
+        return {"id": "knowledge-1"}
+
+    monkeypatch.setattr("app.gateway.routers.materials._collect", collect)
     monkeypatch.setattr(
-        "app.gateway.routers.materials.verify_artifact_token",
-        lambda token: {"thread_id": "thread-1", "path": "/mnt/user-data/outputs/静夜思.md"} if token == "signed" else None,
+        "app.gateway.routers.materials.get_paths",
+        lambda: SimpleNamespace(resolve_virtual_path=lambda *_args, **_kwargs: actual),
     )
-
-    assert _validate_preview_url("thread-1", "/mnt/user-data/outputs/静夜思.md", url, "deerflow.example") == url
-
-
-def test_validate_preview_url_accepts_https_default_port_from_request_host(monkeypatch) -> None:
-    url = "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed"
     monkeypatch.setattr(
-        "app.gateway.routers.materials.verify_artifact_token",
-        lambda token: {"thread_id": "thread-1", "path": "/mnt/user-data/outputs/report.pdf"} if token == "signed" else None,
+        "app.gateway.routers.materials.get_extensions_config",
+        lambda: SimpleNamespace(mcp_servers={"weknora": SimpleNamespace(enabled=True)}),
     )
-
-    assert _validate_preview_url("thread-1", "/mnt/user-data/outputs/report.pdf", url, "deerflow.example:443") == url
-
-
-def test_preview_url_uses_gateway_request_host(monkeypatch) -> None:
-    monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
-    request = Request({"type": "http", "scheme": "http", "server": ("127.0.0.1", 8001), "path": "/api/materials", "headers": [(b"host", b"127.0.0.1:8001")]})
-
-    url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
-
-    assert url == "http://127.0.0.1:8001/api/public/artifacts/thread-1/mnt/user-data/outputs/%E9%9D%99%E5%A4%9C%E6%80%9D.md?artifact_token=signed"
-
-
-def test_preview_url_uses_forwarded_https_host_and_removes_default_port(monkeypatch) -> None:
-    monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
-    request = Request(
-        {
-            "type": "http",
-            "scheme": "http",
-            "server": ("gateway", 8001),
-            "path": "/api/materials",
-            "headers": [
-                (b"host", b"gateway:8001"),
-                (b"x-forwarded-host", b"fintech.teamshub.com:443"),
-                (b"x-forwarded-proto", b"https"),
-            ],
-        }
-    )
-
-    url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
-
-    assert url.startswith("https://fintech.teamshub.com/api/public/artifacts/thread-1/")
-
-
-def test_preview_url_inferrs_https_from_host_port_when_proxy_protocol_is_missing(monkeypatch) -> None:
-    monkeypatch.setattr("app.gateway.routers.materials.create_artifact_token", lambda **_kwargs: "signed")
-    request = Request(
-        {
-            "type": "http",
-            "scheme": "http",
-            "server": ("gateway", 8001),
-            "path": "/api/materials",
-            "headers": [(b"host", b"fintech.teamshub.com:443")],
-        }
-    )
-
-    url = _preview_url(request, "thread-1", "/mnt/user-data/outputs/静夜思.md", "user-1")
-
-    assert url.startswith("https://fintech.teamshub.com/api/public/artifacts/thread-1/")
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://other.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed",
-        "https://deerflow.example/api/public/artifacts/other/mnt/user-data/outputs/report.pdf?artifact_token=signed",
-        "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/other.pdf?artifact_token=signed",
-        "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=invalid",
-        "https://deerflow.example/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed&other=value",
-        "https://[invalid/api/public/artifacts/thread-1/mnt/user-data/outputs/report.pdf?artifact_token=signed",
-    ],
-)
-def test_validate_preview_url_rejects_other_hosts_threads_files_and_tokens(monkeypatch, url: str) -> None:
     monkeypatch.setattr(
-        "app.gateway.routers.materials.verify_artifact_token",
-        lambda token: {"thread_id": "thread-1", "path": "/mnt/user-data/outputs/report.pdf"} if token == "signed" else None,
+        "app.gateway.routers.materials._upload_tool",
+        lambda: SimpleNamespace(
+            args_schema=SimpleNamespace(model_fields={"kb_id": object(), "title": object(), "content": object()}),
+            ainvoke=invoke,
+        ),
     )
-    with pytest.raises(ValueError, match="预览 URL"):
-        _validate_preview_url("thread-1", "/mnt/user-data/outputs/report.pdf", url, "deerflow.example")
+
+    response = asyncio.run(upload_knowledge.__wrapped__("thread-1", request, path=path))
+
+    assert response.status == "uploaded"
+    assert response.remote_id == "knowledge-1"
+    assert invoked == {
+        "kb_id": KNOWLEDGE_BASE_ID,
+        "title": "静夜思",
+        "content": "# 静夜思\n\n床前明月光",
+    }

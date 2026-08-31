@@ -133,7 +133,10 @@ class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         except Exception as exc:
             logger.exception("Tool execution failed (sync): name=%s id=%s", request.tool_call.get("name"), request.tool_call.get("id"))
             return self._build_error_message(request, exc)
-        return normalize_tool_result(self._maybe_stamp(result, request))
+        return normalize_tool_result(
+            self._maybe_stamp(result, request),
+            tool_call_id=str(request.tool_call.get("id") or ""),
+        )
 
     @override
     async def awrap_tool_call(
@@ -149,7 +152,10 @@ class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         except Exception as exc:
             logger.exception("Tool execution failed (async): name=%s id=%s", request.tool_call.get("name"), request.tool_call.get("id"))
             return self._build_error_message(request, exc)
-        return normalize_tool_result(self._maybe_stamp(result, request))
+        return normalize_tool_result(
+            self._maybe_stamp(result, request),
+            tool_call_id=str(request.tool_call.get("id") or ""),
+        )
 
 
 def _build_runtime_middlewares(
@@ -158,6 +164,7 @@ def _build_runtime_middlewares(
     include_uploads: bool,
     include_dangling_tool_call_patch: bool,
     lazy_init: bool = True,
+    receipts_render_mode: str = "delegation_only",
     authorization_provider=None,
     authorization_infrastructure_tool_names: frozenset[str] = frozenset(),
 ) -> list[AgentMiddleware]:
@@ -201,6 +208,20 @@ def _build_runtime_middlewares(
 
         tail.append(DanglingToolCallMiddleware())
     tail.append(LLMErrorHandlingMiddleware(app_config=app_config))
+
+    # ToolReceiptMiddleware is the outermost wrap_tool_call layer: Guardrail,
+    # SandboxAudit, ReadBeforeWrite, and ToolProgress can all short-circuit a
+    # call with their own ToolMessage, and SandboxAudit rebuilds medium-risk
+    # results — an inner receipt layer would miss those results and silently
+    # gap the ledger. Stamping out here still sees deerflow_tool_meta on
+    # normal results (ToolErrorHandling stamps it on the inner return path)
+    # and on self-stamped short-circuit messages; the remainder fall back to
+    # message.status (see make_tool_receipt).
+    verification_config = app_config.verification
+    if verification_config.receipts_enabled:
+        from deerflow.agents.middlewares.tool_receipt_middleware import ToolReceiptMiddleware
+
+        tail.append(ToolReceiptMiddleware(render_mode=receipts_render_mode))
 
     # Authorization uses the existing GuardrailMiddleware so execution-time
     # deny, audit, and fail-closed handling stay in one proven implementation.
@@ -299,6 +320,9 @@ def build_lead_runtime_middlewares(
         include_uploads=True,
         include_dangling_tool_call_patch=True,
         lazy_init=lazy_init,
+        # The lead renders the receipt ledger only while processing subagent
+        # results (default "delegation_only"); stamping stays always-on.
+        receipts_render_mode=app_config.verification.receipts_render_mode,
         authorization_provider=authorization_provider,
         authorization_infrastructure_tool_names=(frozenset({deferred_setup.tool_search_tool.name}) if authorization_provider is not None and deferred_setup is not None and deferred_setup.tool_search_tool is not None else frozenset()),
     )
@@ -332,6 +356,9 @@ def build_subagent_runtime_middlewares(
         include_uploads=False,
         include_dangling_tool_call_patch=True,
         lazy_init=lazy_init,
+        # Subagent chains always render the ledger: citations are produced in
+        # the subagent context — no ledger, no citations, Layer 1 goes inert.
+        receipts_render_mode="always",
         authorization_provider=authorization_provider,
         authorization_infrastructure_tool_names=(frozenset({deferred_setup.tool_search_tool.name}) if authorization_provider is not None and deferred_setup is not None and deferred_setup.tool_search_tool is not None else frozenset()),
     )

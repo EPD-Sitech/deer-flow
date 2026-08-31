@@ -44,6 +44,7 @@ class AgentResponse(BaseModel):
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
     mcp_servers: list[str] | None = Field(default=None, description="Optional MCP server whitelist (None=all, []=none)")
     skills: list[str] | None = Field(default=None, description="Optional skill whitelist (None=all, []=none)")
+    allowed_subagents: list[str] | None = Field(default=None, description="Subagent allowlist (None=all enabled, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
@@ -66,6 +67,7 @@ class AgentCreateRequest(BaseModel):
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
     mcp_servers: list[str] | None = Field(default=None, description="Optional MCP server whitelist (None=all, []=none)")
     skills: list[str] | None = Field(default=None, description="Optional skill whitelist (None=all enabled, []=none)")
+    allowed_subagents: list[str] | None = Field(default=None, description="Subagent allowlist (None=all enabled, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
@@ -86,6 +88,7 @@ class AgentUpdateRequest(BaseModel):
     tool_groups: list[str] | None = Field(default=None, description="Updated tool group whitelist")
     mcp_servers: list[str] | None = Field(default=None, description="Updated MCP server whitelist (None=all, []=none)")
     skills: list[str] | None = Field(default=None, description="Updated skill whitelist (None=all, []=none)")
+    allowed_subagents: list[str] | None = Field(default=None, description="Updated subagent allowlist (None=all, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Updated per-agent sampling overrides")
     thinking_enabled: bool | None = Field(default=None, description="Updated per-agent thinking-mode default")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Updated per-agent reasoning-effort default")
@@ -216,6 +219,7 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         tool_groups=agent_cfg.tool_groups,
         mcp_servers=agent_cfg.mcp_servers,
         skills=agent_cfg.skills,
+        allowed_subagents=agent_cfg.allowed_subagents,
         model_settings=agent_cfg.model_settings,
         thinking_enabled=agent_cfg.thinking_enabled,
         reasoning_effort=agent_cfg.reasoning_effort,
@@ -357,6 +361,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         config_data["skills"] = request.skills
     if request.category is not None:
         config_data["category"] = request.category
+    if request.allowed_subagents is not None:
+        config_data["allowed_subagents"] = request.allowed_subagents
     # model / model_settings / thinking_enabled / reasoning_effort (issue #4336).
     _apply_model_behavior(config_data, request)
 
@@ -437,7 +443,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         # Use model_fields_set to distinguish "field omitted" from "explicitly set to null".
         # This is critical for skills where None means "inherit all" (not "don't change").
         fields_set = request.model_fields_set
-        config_changed = bool(fields_set & ({"description", "tool_groups", "mcp_servers", "skills", "category"} | set(_MODEL_BEHAVIOR_FIELDS)))
+        config_changed = bool(fields_set & ({"description", "tool_groups", "mcp_servers", "skills", "category", "allowed_subagents"} | set(_MODEL_BEHAVIOR_FIELDS)))
 
         updated: dict | None = None
         if config_changed:
@@ -469,6 +475,11 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
             )
             if new_category is not None:
                 updated["category"] = new_category
+
+            # allowed_subagents: None = all, [] = hard deny, list = whitelist.
+            new_allowed_subagents = request.allowed_subagents if "allowed_subagents" in fields_set else agent_cfg.allowed_subagents
+            if new_allowed_subagents is not None:
+                updated["allowed_subagents"] = new_allowed_subagents
 
             # model / model_settings / thinking_enabled / reasoning_effort:
             # take explicitly-set request fields, else preserve the existing

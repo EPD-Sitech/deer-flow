@@ -507,6 +507,7 @@ def test_update_agent_round_trips_known_fields(tmp_path, patched_paths):
         tool_groups=["g1"],
         mcp_servers=["analytics"],
         model="m1",
+        allowed_subagents=["planner"],
     )
     fake_app_config = MagicMock()
     fake_app_config.get_model_config.return_value = object()
@@ -520,6 +521,7 @@ def test_update_agent_round_trips_known_fields(tmp_path, patched_paths):
     assert cfg["tool_groups"] == ["g1"]
     assert cfg["mcp_servers"] == ["analytics"]
     assert cfg["model"] == "m1"
+    assert cfg["allowed_subagents"] == ["planner"]
 
 
 def test_update_agent_refuses_on_webhook_channel(tmp_path, patched_paths):

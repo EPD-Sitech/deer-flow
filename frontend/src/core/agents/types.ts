@@ -34,6 +34,7 @@ export interface Agent {
   tool_groups: string[] | null;
   skills: string[] | null;
   mcp_servers?: string[] | null;
+  allowed_subagents?: string[] | null;
   model_settings?: AgentModelSettings | null;
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;
@@ -49,6 +50,7 @@ export interface CreateAgentRequest {
   tool_groups?: string[] | null;
   skills?: string[] | null;
   mcp_servers?: string[] | null;
+  allowed_subagents?: string[] | null;
   model_settings?: AgentModelSettings | null;
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;
@@ -62,6 +64,7 @@ export interface UpdateAgentRequest {
   tool_groups?: string[] | null;
   skills?: string[] | null;
   mcp_servers?: string[] | null;
+  allowed_subagents?: string[] | null;
   model_settings?: AgentModelSettings | null;
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;

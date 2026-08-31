@@ -48,7 +48,7 @@ from deerflow.persistence.migrations._helpers import _normalize_default
 asyncio_test = pytest.mark.asyncio
 
 
-HEAD = "0015_inventory_snapshots"
+HEAD = "0018_merge_inventory_pat"
 BASELINE = "0001_baseline"
 
 

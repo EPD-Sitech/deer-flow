@@ -8,6 +8,7 @@ import {
   PaletteIcon,
   PlugZapIcon,
   SparklesIcon,
+  UsersRoundIcon,
   UserIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -91,6 +92,13 @@ const ToolSettingsPage = dynamic(
     import("./tool-settings-page").then((module) => module.ToolSettingsPage),
   { loading: SettingsPageLoading },
 );
+const SubagentSettingsPage = dynamic(
+  () =>
+    import("./subagent-settings-page").then(
+      (module) => module.SubagentSettingsPage,
+    ),
+  { loading: SettingsPageLoading },
+);
 const AboutSettingsPage = dynamic(
   () =>
     import("./about-settings-page").then((module) => module.AboutSettingsPage),
@@ -153,6 +161,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: BrainIcon,
       },
       { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
+      {
+        id: "subagents",
+        label: t.settings.sections.subagents,
+        icon: UsersRoundIcon,
+      },
       { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
       { id: "about", label: t.settings.sections.about, icon: InfoIcon },
     ] as const;
@@ -218,6 +231,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "appearance" && <AppearanceSettingsPage />}
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "tools" && <ToolSettingsPage />}
+              {activeSection === "subagents" && <SubagentSettingsPage />}
               {activeSection === "skills" && (
                 <SkillSettingsPage
                   onClose={() => props.onOpenChange?.(false)}

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Agent, AgentWelcomeSuggestion } from "@/core/agents";
@@ -111,6 +112,7 @@ export function LocalAgentDetailDialog({
   const subAgentInput = useRef<HTMLInputElement>(null);
   const [subAgentFile, setSubAgentFile] = useState<File | null>(null);
   const [subAgentLoading, setSubAgentLoading] = useState(false);
+  const [subAgentOverwrite, setSubAgentOverwrite] = useState(false);
   const parsedSubAgents = useMemo(
     () => parseSubAgentsFromSoul(soul),
     [soul],
@@ -249,14 +251,30 @@ export function LocalAgentDetailDialog({
         agent.name,
         subAgentFile,
         scope,
+        subAgentOverwrite,
       );
-      const imported =
+      const added =
         result.installed_skills.length + result.merged_sub_agents.length;
+      const updated =
+        result.updated_skills.length + result.updated_sub_agents.length;
+      const skipped =
+        result.skipped_skills.length + result.skipped_sub_agents.length;
       toast.success(
         zh
-          ? `导入完成，共新增 ${imported} 项`
-          : `Import complete: ${imported} item(s) added`,
+          ? `导入完成：新增 ${added} 项，更新 ${updated} 项`
+          : `Import complete: ${added} added, ${updated} updated`,
       );
+      if (skipped > 0) {
+        const names = [
+          ...result.skipped_skills,
+          ...result.skipped_sub_agents,
+        ].join(", ");
+        toast.warning(
+          zh
+            ? `${skipped} 项同名已跳过（未覆盖）：${names}`
+            : `${skipped} item(s) skipped because the name already exists: ${names}`,
+        );
+      }
       if (result.errors.length > 0) {
         toast.error(
           result.errors.map((item) => `${item.name}: ${item.error}`).join(", "),
@@ -696,6 +714,24 @@ export function LocalAgentDetailDialog({
                     }
                   />
                 </button>
+                <label className="flex items-start gap-3 rounded-lg border p-3">
+                  <Switch
+                    checked={subAgentOverwrite}
+                    onCheckedChange={setSubAgentOverwrite}
+                    disabled={subAgentLoading}
+                    className="mt-0.5"
+                  />
+                  <span className="space-y-1">
+                    <span className="block text-sm font-medium">
+                      {zh ? "覆盖同名内容" : "Overwrite existing"}
+                    </span>
+                    <span className="text-muted-foreground block text-xs leading-5">
+                      {zh
+                        ? "关闭时，同名的技能与子智能体一律跳过，只补新增内容；开启后同名技能与子智能体定义会被替换为包里的新版本（用于发布新版本包）。"
+                        : "Off: same-named skills and sub-agents are skipped, only new ones are added. On: same-named skills and sub-agent definitions are replaced with the packaged version."}
+                    </span>
+                  </span>
+                </label>
                 <div className="flex justify-end">
                   <Button
                     onClick={() => void handleSubAgentImport()}
@@ -706,7 +742,13 @@ export function LocalAgentDetailDialog({
                     ) : (
                       <UploadIcon className="size-4" />
                     )}
-                    {zh ? "导入包" : "Import package"}
+                    {subAgentOverwrite
+                      ? zh
+                        ? "覆盖导入"
+                        : "Import & overwrite"
+                      : zh
+                        ? "导入包"
+                        : "Import package"}
                   </Button>
                 </div>
                 <div className="space-y-3 border-t pt-5">

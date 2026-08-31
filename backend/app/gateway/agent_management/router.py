@@ -777,12 +777,32 @@ def _prepare_subagent_package(content: bytes, work_dir: Path) -> tuple[list[Path
     return skill_archives, blocks
 
 
+def _replace_sub_agent_block(soul: str, title: str, block: str) -> str | None:
+    """Replace an existing ``### <title>`` section of SOUL.md with ``block``.
+
+    Returns the new SOUL.md text, or ``None`` when no section matches ``title``.
+    """
+    heading = re.search(rf"^###\s+{re.escape(title)}\s*$", soul, re.MULTILINE)
+    if heading is None:
+        return None
+    following = re.search(r"^#{2,3}\s+", soul[heading.end() :], re.MULTILINE)
+    end = heading.end() + following.start() if following else len(soul)
+    return f"{soul[: heading.start()]}{block}\n\n{soul[end:].lstrip('\n')}"
+
+
 @router.post("/agents/{name}/import-sub-agent-package")
 async def import_sub_agent_package(
     name: str,
     file: UploadFile = File(...),
     scope: AgentScope = "user",
+    overwrite: bool = Form(False),
 ) -> dict[str, Any]:
+    """Install a sub-agent ZIP package into an existing agent.
+
+    By default the import is purely additive: skills and sub-agent sections whose
+    names already exist are skipped. Pass ``overwrite=true`` to replace them
+    in place — that is how a new package version is rolled out.
+    """
     _require_agents_api_enabled()
     normalized = normalize_agent_name(name)
     service = _service(scope)
@@ -795,12 +815,17 @@ async def import_sub_agent_package(
             app_config = await asyncio.to_thread(get_app_config)
             storage = await asyncio.to_thread(get_or_new_user_skill_storage, get_effective_user_id(), app_config=app_config)
             installed_skills: list[str] = []
+            updated_skills: list[str] = []
             skipped_skills: list[str] = []
             errors: list[dict[str, str]] = []
             for skill_archive in skill_archives:
                 try:
-                    result = await storage.ainstall_skill_from_archive(skill_archive)
-                    installed_skills.append(str(result["skill_name"]))
+                    result = await storage.ainstall_skill_from_archive(skill_archive, overwrite=overwrite)
+                    skill_name = str(result["skill_name"])
+                    if result.get("updated"):
+                        updated_skills.append(skill_name)
+                    else:
+                        installed_skills.append(skill_name)
                 except Exception as exc:
                     if type(exc).__name__ == "SkillAlreadyExistsError":
                         skipped_skills.append(skill_archive.stem)
@@ -809,9 +834,16 @@ async def import_sub_agent_package(
 
             soul = str(agent.get("soul") or "")
             merged_sub_agents: list[str] = []
+            updated_sub_agents: list[str] = []
             skipped_sub_agents: list[str] = []
             new_blocks: list[str] = []
             for title, block in blocks:
+                if overwrite:
+                    replaced = _replace_sub_agent_block(soul, title, block)
+                    if replaced is not None:
+                        soul = replaced
+                        updated_sub_agents.append(title)
+                        continue
                 if re.search(rf"^###\s+{re.escape(title)}\s*$", soul, re.MULTILINE):
                     skipped_sub_agents.append(title)
                 else:
@@ -823,17 +855,21 @@ async def import_sub_agent_package(
 
             config = {key: value for key, value in agent.items() if key not in {"soul"}}
             if config.get("skills") is not None:
-                config["skills"] = list(dict.fromkeys([*config.get("skills", []), *installed_skills, *skipped_skills]))
+                config["skills"] = list(dict.fromkeys([*config.get("skills", []), *installed_skills, *updated_skills, *skipped_skills]))
             config_yaml = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
-            if new_blocks or (config.get("skills") is not None and (installed_skills or skipped_skills)):
+            soul_changed = bool(new_blocks or updated_sub_agents)
+            skills_changed = bool(config.get("skills") is not None and (installed_skills or updated_skills or skipped_skills))
+            if soul_changed or skills_changed:
                 await asyncio.to_thread(service.update_files, normalized, config_yaml=config_yaml, soul=soul)
-            if installed_skills:
+            if installed_skills or updated_skills:
                 await refresh_user_skills_system_prompt_cache_async(get_effective_user_id())
             return {
                 "success": not errors,
                 "installed_skills": installed_skills,
+                "updated_skills": updated_skills,
                 "skipped_skills": skipped_skills,
                 "merged_sub_agents": merged_sub_agents,
+                "updated_sub_agents": updated_sub_agents,
                 "skipped_sub_agents": skipped_sub_agents,
                 "errors": errors,
             }

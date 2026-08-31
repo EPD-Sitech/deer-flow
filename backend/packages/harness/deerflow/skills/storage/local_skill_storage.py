@@ -9,6 +9,7 @@ import logging
 import os
 import shutil
 import tempfile
+import uuid
 from collections.abc import Iterable
 from contextlib import nullcontext
 from datetime import UTC, datetime
@@ -121,10 +122,10 @@ class LocalSkillStorage(SkillStorage):
         with self._skill_projection_mutation(remove=removal):
             return super().remove_custom_skill_file(name, relative_path)
 
-    async def ainstall_skill_from_archive(self, archive_path: str | Path) -> dict:
+    async def ainstall_skill_from_archive(self, archive_path: str | Path, *, overwrite: bool = False) -> dict:
         from deerflow.skills.installer import _scan_skill_archive_contents_or_raise
 
-        logger.info("Installing skill from %s", archive_path)
+        logger.info("Installing skill from %s (overwrite=%s)", archive_path, overwrite)
         path = Path(archive_path)
         custom_dir = self._host_root / "custom"
 
@@ -132,11 +133,18 @@ class LocalSkillStorage(SkillStorage):
         # event loop; every filesystem phase around it runs in a worker thread.
         tmp = await asyncio.to_thread(tempfile.mkdtemp)
         try:
-            skill_dir, skill_name, target = await asyncio.to_thread(self._prepare_skill_archive, path, Path(tmp), custom_dir, archive_path)
+            skill_dir, skill_name, target, replaced = await asyncio.to_thread(
+                self._prepare_skill_archive,
+                path,
+                Path(tmp),
+                custom_dir,
+                archive_path,
+                overwrite=overwrite,
+            )
 
             await _scan_skill_archive_contents_or_raise(skill_dir, skill_name, app_config=self._app_config)
 
-            await asyncio.to_thread(self._commit_skill_install, skill_dir, skill_name, custom_dir, target)
+            await asyncio.to_thread(self._commit_skill_install, skill_dir, skill_name, custom_dir, target, overwrite=overwrite)
             logger.info("Skill %r installed to %s", skill_name, target)
         finally:
             try:
@@ -150,7 +158,8 @@ class LocalSkillStorage(SkillStorage):
         return {
             "success": True,
             "skill_name": skill_name,
-            "message": f"Skill '{skill_name}' installed successfully",
+            "updated": replaced,
+            "message": f"Skill '{skill_name}' {'updated' if replaced else 'installed'} successfully",
         }
 
     @staticmethod
@@ -161,7 +170,15 @@ class LocalSkillStorage(SkillStorage):
         except OSError:
             logger.warning("Failed to clean up skill install temp dir %s", tmp, exc_info=True)
 
-    def _prepare_skill_archive(self, path: Path, tmp_path: Path, custom_dir: Path, archive_path: str | Path) -> tuple[Path, str, Path]:
+    def _prepare_skill_archive(
+        self,
+        path: Path,
+        tmp_path: Path,
+        custom_dir: Path,
+        archive_path: str | Path,
+        *,
+        overwrite: bool = False,
+    ) -> tuple[Path, str, Path, bool]:
         """Extract and validate the archive (blocking; runs off the event loop)."""
         import zipfile
 
@@ -202,21 +219,45 @@ class LocalSkillStorage(SkillStorage):
             raise ValueError(f"Invalid skill name: {skill_name}")
 
         target = custom_dir / skill_name
-        if target.exists():
+        replacing = target.exists()
+        if replacing and not overwrite:
             raise SkillAlreadyExistsError(f"Skill '{skill_name}' already exists")
 
-        return skill_dir, skill_name, target
+        return skill_dir, skill_name, target, replacing
 
-    def _commit_skill_install(self, skill_dir: Path, skill_name: str, custom_dir: Path, target: Path) -> None:
+    def _commit_skill_install(
+        self,
+        skill_dir: Path,
+        skill_name: str,
+        custom_dir: Path,
+        target: Path,
+        *,
+        overwrite: bool = False,
+    ) -> None:
         """Stage and move the validated skill into place (blocking; runs off the event loop)."""
         from deerflow.skills.installer import _move_staged_skill_into_reserved_target
 
+        # Move the previous install aside first so a failed overwrite can be
+        # rolled back instead of leaving the skill half-replaced. The dot
+        # prefix keeps the backup out of the skill scanner's directory walk.
+        backup: Path | None = None
+        if overwrite and target.exists():
+            backup = target.parent / f".replacing-{skill_name}-{uuid.uuid4().hex}"
+            target.rename(backup)
+
         with self._skill_projection_mutation():
-            with tempfile.TemporaryDirectory(prefix=f".installing-{skill_name}-", dir=custom_dir) as staging_root:
-                staging_target = Path(staging_root) / skill_name
-                shutil.copytree(skill_dir, staging_target)
-                _move_staged_skill_into_reserved_target(staging_target, target)
-            make_skill_written_path_sandbox_readable(custom_dir, target)
+            try:
+                with tempfile.TemporaryDirectory(prefix=f".installing-{skill_name}-", dir=custom_dir) as staging_root:
+                    staging_target = Path(staging_root) / skill_name
+                    shutil.copytree(skill_dir, staging_target)
+                    _move_staged_skill_into_reserved_target(staging_target, target)
+                make_skill_written_path_sandbox_readable(custom_dir, target)
+            except Exception:
+                if backup is not None and not target.exists():
+                    backup.rename(target)
+                raise
+            if backup is not None:
+                shutil.rmtree(backup, ignore_errors=True)
 
     def delete_custom_skill(self, name: str, *, history_meta: dict | None = None) -> None:
         self.validate_skill_name(name)

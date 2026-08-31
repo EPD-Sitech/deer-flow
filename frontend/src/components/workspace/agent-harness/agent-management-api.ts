@@ -81,8 +81,10 @@ export interface ImportAgentResult {
 export interface ImportSubAgentResult {
   success: boolean;
   installed_skills: string[];
+  updated_skills: string[];
   skipped_skills: string[];
   merged_sub_agents: string[];
+  updated_sub_agents: string[];
   skipped_sub_agents: string[];
   errors: Array<{ name: string; error: string }>;
 }
@@ -392,9 +394,11 @@ export function importSubAgentPackage(
   name: string,
   file: File,
   scope: AgentScope = "user",
+  overwrite = false,
 ) {
   const body = new FormData();
   body.append("file", file);
+  body.append("overwrite", String(overwrite));
   return jsonRequest<ImportSubAgentResult>(
     withScope(
       `/api/agents/${encodeURIComponent(name)}/import-sub-agent-package`,

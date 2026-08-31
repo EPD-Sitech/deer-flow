@@ -322,10 +322,10 @@ class UserScopedSkillStorage(LocalSkillStorage):
     # Install — redirect custom_dir to user directory
     # ------------------------------------------------------------------
 
-    async def ainstall_skill_from_archive(self, archive_path: str | Path) -> dict:
+    async def ainstall_skill_from_archive(self, archive_path: str | Path, *, overwrite: bool = False) -> dict:
         from deerflow.skills.installer import _scan_skill_archive_contents_or_raise
 
-        logger.info("Installing skill from %s for user %s", archive_path, self._user_id)
+        logger.info("Installing skill from %s for user %s (overwrite=%s)", archive_path, self._user_id, overwrite)
         path = Path(archive_path)
         custom_dir = self._user_custom_root
 
@@ -336,11 +336,18 @@ class UserScopedSkillStorage(LocalSkillStorage):
         # event loop; every filesystem phase around it runs in a worker thread.
         tmp = await asyncio.to_thread(tempfile.mkdtemp)
         try:
-            skill_dir, skill_name, target = await asyncio.to_thread(self._prepare_skill_archive, path, Path(tmp), custom_dir, archive_path)
+            skill_dir, skill_name, target, replaced = await asyncio.to_thread(
+                self._prepare_skill_archive,
+                path,
+                Path(tmp),
+                custom_dir,
+                archive_path,
+                overwrite=overwrite,
+            )
 
             await _scan_skill_archive_contents_or_raise(skill_dir, skill_name)
 
-            await asyncio.to_thread(self._commit_skill_install, skill_dir, skill_name, custom_dir, target)
+            await asyncio.to_thread(self._commit_skill_install, skill_dir, skill_name, custom_dir, target, overwrite=overwrite)
             logger.info("Skill %r installed to %s for user %s", skill_name, target, self._user_id)
         finally:
             try:
@@ -354,7 +361,8 @@ class UserScopedSkillStorage(LocalSkillStorage):
         return {
             "success": True,
             "skill_name": skill_name,
-            "message": f"Skill '{skill_name}' installed successfully for user '{self._user_id}'",
+            "updated": replaced,
+            "message": f"Skill '{skill_name}' {'updated' if replaced else 'installed'} successfully for user '{self._user_id}'",
         }
 
     # ------------------------------------------------------------------

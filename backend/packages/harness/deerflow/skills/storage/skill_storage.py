@@ -165,17 +165,20 @@ class SkillStorage(ABC):
         return previous_content
 
     @abstractmethod
-    async def ainstall_skill_from_archive(self, archive_path: str | Path) -> dict:
+    async def ainstall_skill_from_archive(self, archive_path: str | Path, *, overwrite: bool = False) -> dict:
         """Async install of a skill from a ``.skill`` ZIP archive.
+
+        ``overwrite=True`` replaces an already-installed skill of the same name
+        instead of raising ``SkillAlreadyExistsError``.
 
         Origin: ``deerflow.skills.installer.ainstall_skill_from_archive``.
         """
 
-    def install_skill_from_archive(self, archive_path: str | Path) -> dict:
+    def install_skill_from_archive(self, archive_path: str | Path, *, overwrite: bool = False) -> dict:
         """Sync wrapper — delegates to :meth:`ainstall_skill_from_archive`."""
         from deerflow.skills.installer import _run_async_install
 
-        return _run_async_install(self.ainstall_skill_from_archive(archive_path))
+        return _run_async_install(self.ainstall_skill_from_archive(archive_path, overwrite=overwrite))
 
     @abstractmethod
     def delete_custom_skill(self, name: str, *, history_meta: dict | None = None) -> None:

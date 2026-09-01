@@ -21,4 +21,23 @@ describe("LocalAgentGuideQuestions", () => {
     fireEvent.click(screen.getByRole("button", { name: "帮我分析报告" }));
     expect(onSelect).toHaveBeenCalledWith("分析附件中的报告");
   });
+
+  it("renders duplicate question labels without a React key warning", () => {
+    const consoleError = rs
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    render(
+      <LocalAgentGuideQuestions
+        questions={[
+          { question: "生成旅游攻略 HTML", prompt: "生成版本一" },
+          { question: "生成旅游攻略 HTML", prompt: "生成版本二" },
+        ]}
+        onSelect={rs.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "生成旅游攻略 HTML" })).toHaveLength(2);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
 });

@@ -308,7 +308,7 @@ export default function AgentChatPage() {
           <div className="relative flex size-full min-h-0 flex-col justify-between">
             <header
               className={cn(
-                "relative z-30 flex h-12 shrink-0 items-center gap-2 px-2 sm:px-4",
+                "relative z-30 flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 px-2 pt-[env(safe-area-inset-top)] sm:px-4",
                 isWelcomeMode
                   ? "bg-background/0 backdrop-blur-none"
                   : "bg-background/80 shadow-xs backdrop-blur",
@@ -329,7 +329,7 @@ export default function AgentChatPage() {
                 </span>
               </div>
 
-              <div className="flex min-w-0 flex-1 items-center text-sm font-medium">
+              <div className="hidden min-w-0 flex-1 items-center text-sm font-medium sm:flex">
                 <ThreadTitle threadId={threadId} thread={thread} />
               </div>
               <div className="flex shrink-0 items-center sm:mr-4">

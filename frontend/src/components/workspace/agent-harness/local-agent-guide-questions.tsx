@@ -25,9 +25,9 @@ export function LocalAgentGuideQuestions({
         试试这样问
       </h2>
       <div className="grid grid-cols-1 gap-2">
-        {questions.map((item) => (
+        {questions.map((item, index) => (
           <button
-            key={item.question}
+            key={`${item.question}-${index}`}
             type="button"
             className="border-border bg-background text-muted-foreground hover:border-primary/35 hover:bg-accent/50 hover:text-foreground group flex min-h-[52px] w-full cursor-pointer items-center gap-2 rounded-md border px-3.5 py-2.5 text-left text-xs leading-5 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             disabled={disabled}

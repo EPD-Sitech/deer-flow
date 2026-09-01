@@ -29,6 +29,13 @@ const config = {
   },
   turbopack: {
     root: fileURLToPath(new URL(".", import.meta.url)),
+    // Turbopack resolves CSS package imports from the monorepo root. Point
+    // Tailwind's package import at the frontend package's pnpm dependency.
+    resolveAlias: {
+      tailwindcss: fileURLToPath(
+        new URL("./node_modules/tailwindcss", import.meta.url),
+      ),
+    },
   },
   devIndicators: false,
   allowedDevOrigins: getAllowedDevOrigins(),

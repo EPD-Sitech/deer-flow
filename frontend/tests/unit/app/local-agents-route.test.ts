@@ -19,6 +19,16 @@ describe("local agents route migration", () => {
     );
   });
 
+  it("anchors Turbopack's Tailwind import to the frontend package", () => {
+    const nextConfig = readProjectFile("next.config.js");
+
+    expect(nextConfig).toContain("resolveAlias");
+    expect(nextConfig).toContain("tailwindcss:");
+    expect(nextConfig).toContain(
+      'new URL("./node_modules/tailwindcss", import.meta.url)',
+    );
+  });
+
   it("keeps the original page intact behind the migrated route", () => {
     const originalPage = readProjectFile("src/app/workspace/agents/page.tsx");
     const migratedPage = readProjectFile(

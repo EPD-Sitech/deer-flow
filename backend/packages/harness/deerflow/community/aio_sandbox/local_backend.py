@@ -823,8 +823,11 @@ class LocalContainerBackend(SandboxBackend):
             # requires DAC_OVERRIDE — without it nginx dies with
             # "open() .../access.log failed (13: Permission denied)" on every
             # start (a runtime need, not just startup: access.log is written
-            # per request). Dropping ALL of them makes the image fail before
-            # the readiness endpoint exists.
+            # per request). Some images also chmod a directory they do not own
+            # during setup (e.g. /tmp/.X11-unix after dropping to the runtime
+            # user), which needs CAP_FOWNER — without it the entrypoint aborts
+            # and the readiness endpoint never comes up. Dropping ALL of them
+            # makes the image fail before the readiness endpoint exists.
             # no-new-privileges stays: it only blocks *gaining* privileges
             # through exec, it does not revoke the capabilities added here,
             # and su from the already-root entrypoint does not need to gain
@@ -847,6 +850,7 @@ class LocalContainerBackend(SandboxBackend):
                         "--cap-add=SETUID",
                         "--cap-add=SETGID",
                         "--cap-add=DAC_OVERRIDE",
+                        "--cap-add=FOWNER",
                         "--security-opt",
                         "no-new-privileges",
                     ]

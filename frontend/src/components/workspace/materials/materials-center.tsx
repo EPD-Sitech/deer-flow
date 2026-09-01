@@ -14,11 +14,21 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Layout,
+  type PanelSize,
+  usePanelRef,
+} from "react-resizable-panels";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import {
   Select,
   SelectContent,
@@ -26,12 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { loadArtifactContent } from "@/core/artifacts/loader";
 import { appendHtmlPreviewBaseHref } from "@/core/artifacts/preview";
@@ -108,6 +112,9 @@ const typeLabels: Record<string, string> = {
   code: "代码",
   other: "其他",
 };
+
+const PREVIEW_PANEL_DEFAULT_SIZE = "40%";
+const PREVIEW_PANEL_ANIMATION_MS = 280;
 
 function formatSize(bytes: number) {
   if (!bytes) return "—";
@@ -207,7 +214,7 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
   }, [content, language, url]);
 
   return (
-    <div className="bg-background text-foreground flex h-full flex-col">
+    <div className="bg-background text-foreground flex size-full flex-col overflow-hidden rounded-lg border shadow-lg">
       <div className="bg-muted/50 flex items-center justify-between gap-2 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <MaterialIcon item={item} />
@@ -361,6 +368,15 @@ export function MaterialsCenter() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<Material | null>(null);
+  const [presented, setPresented] = useState<Material | null>(null);
+  const [animatingPreviewPanel, setAnimatingPreviewPanel] = useState(false);
+  const previewPanelRef = usePanelRef();
+  const previewOpen = selected !== null;
+  const previewOpenRef = useRef(previewOpen);
+  const previewSizeRef = useRef(PREVIEW_PANEL_DEFAULT_SIZE);
+  const [initialPreviewPanelSize] = useState(() =>
+    previewOpen ? PREVIEW_PANEL_DEFAULT_SIZE : "0%",
+  );
   const { data, isLoading, error } = useMaterials({
     q: query,
     type,
@@ -381,6 +397,45 @@ export function MaterialsCenter() {
   const canUpload = Boolean(
     capabilities?.can_upload && user?.system_role === "admin",
   );
+
+  const handlePreviewPanelResize = useCallback((size: PanelSize) => {
+    if (!previewOpenRef.current || size.asPercentage <= 0) return;
+    previewSizeRef.current = `${size.asPercentage}%`;
+  }, []);
+
+  const handlePreviewPanelLayoutChanged = useCallback((layout: Layout) => {
+    if (previewOpenRef.current && layout["materials-preview"] === 0) {
+      setSelected(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (previewOpenRef.current === previewOpen) return;
+    previewOpenRef.current = previewOpen;
+    setAnimatingPreviewPanel(true);
+    if (previewOpen) {
+      previewPanelRef.current?.resize(previewSizeRef.current);
+    } else {
+      previewPanelRef.current?.collapse();
+    }
+    const timeout = window.setTimeout(
+      () => setAnimatingPreviewPanel(false),
+      PREVIEW_PANEL_ANIMATION_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [previewOpen, previewPanelRef]);
+
+  useEffect(() => {
+    if (selected) {
+      setPresented(selected);
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setPresented(null),
+      PREVIEW_PANEL_ANIMATION_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [selected]);
 
   const toggleFavorite = (item: Material) =>
     favorite.mutate(
@@ -446,158 +501,194 @@ export function MaterialsCenter() {
           </span>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
-        <div>
-          {error && (
-            <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
-              资料加载失败，请刷新重试。
-            </div>
-          )}
-          {isLoading ? (
-            <div className="text-muted-foreground rounded-lg border p-10 text-center text-sm">
-              正在加载资料…
-            </div>
-          ) : groups.length === 0 ? (
-            <div className="text-muted-foreground rounded-lg border border-dashed p-14 text-center text-sm">
-              没有找到匹配的资料，请调整搜索或筛选条件。
-            </div>
-          ) : (
-            <div className="bg-card dark:bg-sidebar-accent overflow-x-auto rounded-lg border shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)]">
-              <div className="text-foreground bg-muted/30 materials-grid hidden min-w-[900px] items-center gap-3 border-b px-5 py-3 text-sm font-semibold md:grid">
-                <span />
-                <span>名称</span>
-                <span>类型</span>
-                <span>更新时间</span>
-                <span>大小</span>
-                <span>操作</span>
-              </div>
-              {groups.map((group) => {
-                const isCollapsed = collapsed[group.threadId];
-                return (
-                  <section
-                    key={group.threadId}
-                    className="border-border border-b last:border-0"
-                  >
-                    <div className="bg-muted/30 flex items-center gap-2 px-4 py-3.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCollapsed((current) => ({
-                            ...current,
-                            [group.threadId]: !current[group.threadId],
-                          }))
-                        }
-                        className="text-muted-foreground hover:bg-accent grid size-6 place-items-center rounded-md"
-                        aria-label={isCollapsed ? "展开会话" : "折叠会话"}
+      <ResizablePanelGroup
+        id="materials-preview-group"
+        orientation="horizontal"
+        onLayoutChanged={handlePreviewPanelLayoutChanged}
+        className={cn(
+          "size-full min-h-0",
+          animatingPreviewPanel &&
+            "[&>[data-panel]]:transition-[flex-grow] [&>[data-panel]]:duration-[280ms] [&>[data-panel]]:ease-out motion-reduce:[&>[data-panel]]:transition-none",
+        )}
+      >
+        <ResizablePanel
+          id="materials-list"
+          minSize="30%"
+          className="min-h-0 min-w-0"
+        >
+          <div className="size-full overflow-y-auto px-5 py-4 sm:px-6">
+            <div>
+              {error && (
+                <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
+                  资料加载失败，请刷新重试。
+                </div>
+              )}
+              {isLoading ? (
+                <div className="text-muted-foreground rounded-lg border p-10 text-center text-sm">
+                  正在加载资料…
+                </div>
+              ) : groups.length === 0 ? (
+                <div className="text-muted-foreground rounded-lg border border-dashed p-14 text-center text-sm">
+                  没有找到匹配的资料，请调整搜索或筛选条件。
+                </div>
+              ) : (
+                <div className="bg-card dark:bg-sidebar-accent overflow-x-auto rounded-lg border shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)]">
+                  <div className="text-foreground bg-muted/30 materials-grid hidden min-w-[900px] items-center gap-3 border-b px-5 py-3 text-sm font-semibold md:grid">
+                    <span />
+                    <span>名称</span>
+                    <span>类型</span>
+                    <span>更新时间</span>
+                    <span>大小</span>
+                    <span>操作</span>
+                  </div>
+                  {groups.map((group) => {
+                    const isCollapsed = collapsed[group.threadId];
+                    return (
+                      <section
+                        key={group.threadId}
+                        className="border-border border-b last:border-0"
                       >
-                        <ChevronDownIcon
-                          className={cn(
-                            "size-4 transition-transform",
-                            isCollapsed && "-rotate-90",
-                          )}
-                        />
-                      </button>
-                      <MessagesSquareIcon className="text-muted-foreground size-4 shrink-0" />
-                      <Link
-                        href={`/workspace/chats/${group.threadId}`}
-                        className="text-foreground min-w-0 truncate text-base font-semibold hover:underline"
-                      >
-                        {group.title}
-                      </Link>
-                      <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-                        {group.items.length} 个文件
-                      </span>
-                    </div>
-                    {!isCollapsed && (
-                      <div>
-                        {group.items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="materials-grid hover:bg-accent grid items-center gap-3 border-t border-dashed px-5 py-2.5 transition-colors"
+                        <div className="bg-muted/30 flex items-center gap-2 px-4 py-3.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCollapsed((current) => ({
+                                ...current,
+                                [group.threadId]: !current[group.threadId],
+                              }))
+                            }
+                            className="text-muted-foreground hover:bg-accent grid size-6 place-items-center rounded-md"
+                            aria-label={isCollapsed ? "展开会话" : "折叠会话"}
                           >
-                            <span className="relative left-7">
-                              <MaterialIcon item={item} />
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setSelected(item)}
-                              className="text-foreground min-w-0 truncate text-left text-sm hover:underline"
-                              title={item.name}
-                            >
-                              {item.name}
-                            </button>
-                            <span className="bg-primary/10 text-primary hidden rounded-md px-2 py-1 text-center text-[11px] md:inline-block">
-                              {typeLabels[item.type] ?? "其他"}
-                            </span>
-                            <span className="text-muted-foreground hidden text-xs md:block">
-                              {formatDate(item.updated_at)}
-                            </span>
-                            <span className="text-muted-foreground hidden text-xs md:block">
-                              {formatSize(item.size)}
-                            </span>
-                            <div className="flex items-center justify-start gap-0.5">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                  "size-7",
-                                  item.favorite && "text-amber-500",
-                                )}
-                                onClick={() => toggleFavorite(item)}
-                                aria-label={item.favorite ? "取消收藏" : "收藏"}
+                            <ChevronDownIcon
+                              className={cn(
+                                "size-4 transition-transform",
+                                isCollapsed && "-rotate-90",
+                              )}
+                            />
+                          </button>
+                          <MessagesSquareIcon className="text-muted-foreground size-4 shrink-0" />
+                          <Link
+                            href={`/workspace/chats/${group.threadId}`}
+                            className="text-foreground min-w-0 truncate text-base font-semibold hover:underline"
+                          >
+                            {group.title}
+                          </Link>
+                          <span className="text-muted-foreground ml-auto shrink-0 text-xs">
+                            {group.items.length} 个文件
+                          </span>
+                        </div>
+                        {!isCollapsed && (
+                          <div>
+                            {group.items.map((item) => (
+                              <div
+                                key={item.id}
+                                className="materials-grid hover:bg-accent grid items-center gap-3 border-t border-dashed px-5 py-2.5 transition-colors"
                               >
-                                {item.favorite ? (
-                                  <StarIcon className="size-4 fill-current" />
-                                ) : (
-                                  <StarIcon className="size-4" />
-                                )}
-                              </Button>
-                              {canUpload &&
-                                item.name.toLowerCase().endsWith(".md") && (
+                                <span className="relative left-7">
+                                  <MaterialIcon item={item} />
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelected(item)}
+                                  className="text-foreground min-w-0 truncate text-left text-sm hover:underline"
+                                  title={item.name}
+                                >
+                                  {item.name}
+                                </button>
+                                <span className="bg-primary/10 text-primary hidden rounded-md px-2 py-1 text-center text-[11px] md:inline-block">
+                                  {typeLabels[item.type] ?? "其他"}
+                                </span>
+                                <span className="text-muted-foreground hidden text-xs md:block">
+                                  {formatDate(item.updated_at)}
+                                </span>
+                                <span className="text-muted-foreground hidden text-xs md:block">
+                                  {formatSize(item.size)}
+                                </span>
+                                <div className="flex items-center justify-start gap-0.5">
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="text-muted-foreground size-7"
-                                    disabled={upload.isPending}
-                                    onClick={() => uploadItem(item)}
-                                    aria-label="上传到知识库"
-                                    title="上传到知识库"
+                                    className={cn(
+                                      "size-7",
+                                      item.favorite && "text-amber-500",
+                                    )}
+                                    onClick={() => toggleFavorite(item)}
+                                    aria-label={
+                                      item.favorite ? "取消收藏" : "收藏"
+                                    }
                                   >
-                                    {upload.isPending ? (
-                                      <LoaderIcon className="size-4 animate-spin" />
+                                    {item.favorite ? (
+                                      <StarIcon className="size-4 fill-current" />
                                     ) : (
-                                      <ArrowUpFromLineIcon className="size-4" />
+                                      <StarIcon className="size-4" />
                                     )}
                                   </Button>
-                                )}
-                            </div>
+                                  {canUpload &&
+                                    item.name.toLowerCase().endsWith(".md") && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-muted-foreground size-7"
+                                        disabled={upload.isPending}
+                                        onClick={() => uploadItem(item)}
+                                        aria-label="上传到知识库"
+                                        title="上传到知识库"
+                                      >
+                                        {upload.isPending ? (
+                                          <LoaderIcon className="size-4 animate-spin" />
+                                        ) : (
+                                          <ArrowUpFromLineIcon className="size-4" />
+                                        )}
+                                      </Button>
+                                    )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                );
-              })}
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          </div>
+        </ResizablePanel>
+        <ResizableHandle
+          id="materials-preview-separator"
+          withHandle
+          disabled={!previewOpen}
+          className={cn(
+            "opacity-33 transition-opacity duration-200 ease-out hover:opacity-100 motion-reduce:transition-none",
+            !previewOpen && "pointer-events-none opacity-0",
           )}
-        </div>
-      </div>
-      <Sheet
-        open={selected !== null}
-        onOpenChange={(open) => !open && setSelected(null)}
-      >
-        <SheetContent
-          side="right"
-          className="w-[calc(100vw-1rem)] max-w-none gap-0 p-0 sm:max-w-none md:w-[40vw] [&>button]:hidden"
+        />
+        <ResizablePanel
+          id="materials-preview"
+          panelRef={previewPanelRef}
+          collapsible
+          collapsedSize="0%"
+          defaultSize={initialPreviewPanelSize}
+          minSize="20%"
+          onResize={handlePreviewPanelResize}
+          className="min-h-0 min-w-0"
         >
-          <SheetHeader className="sr-only">
-            <SheetTitle>{selected?.name ?? "资料预览"}</SheetTitle>
-          </SheetHeader>
-          {selected && (
-            <Preview item={selected} onClose={() => setSelected(null)} />
-          )}
-        </SheetContent>
-      </Sheet>
+          <aside
+            aria-hidden={!previewOpen}
+            className={cn(
+              "size-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-[280ms] ease-out motion-reduce:transition-none",
+              previewOpen ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          >
+            <div className="size-full p-4">
+              {presented && (
+                <Preview item={presented} onClose={() => setSelected(null)} />
+              )}
+            </div>
+          </aside>
+        </ResizablePanel>
+      </ResizablePanelGroup>
       <style jsx>{`
         .materials-grid {
           grid-template-columns: 36px minmax(0, 1fr) 28px 28px;

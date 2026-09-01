@@ -6,6 +6,7 @@ export type SettingsSection =
   | "memory"
   | "tools"
   | "skills"
+  | "subagents"
   | "notification"
   | "about";
 

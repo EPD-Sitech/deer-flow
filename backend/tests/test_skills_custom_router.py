@@ -571,6 +571,59 @@ def test_custom_skill_delete_fails_when_skill_dir_removal_fails(monkeypatch, tmp
     assert refresh_calls == []
 
 
+def test_admin_edit_of_builtin_promotes_to_writable_shadow(monkeypatch, tmp_path):
+    """An admin editing a built-in (PUBLIC) skill must not 500 on a read-only
+    directory. The write is transparently promoted into a writable custom shadow
+    copy (same name overrides the built-in); the original built-in is untouched.
+    """
+    from app.gateway.routers import skills_ext
+    from deerflow.config.paths import Paths
+
+    skills_root = tmp_path / "skills"
+    public_dir = skills_root / "public" / "foo"
+    public_dir.mkdir(parents=True)
+    (public_dir / "SKILL.md").write_text(_skill_content("foo", "Built-in skill"), encoding="utf-8")
+
+    monkeypatch.setattr("deerflow.config.paths.get_paths", lambda: Paths(base_dir=tmp_path))
+    monkeypatch.setattr("deerflow.config.paths._paths", None)
+
+    storage = UserScopedSkillStorage("default", host_path=str(skills_root))
+    config = SimpleNamespace(
+        skills=SimpleNamespace(
+            get_skills_path=lambda: skills_root,
+            container_path="/mnt/skills",
+            use="deerflow.skills.storage.local_skill_storage:LocalSkillStorage",
+        ),
+        skill_evolution=SimpleNamespace(enabled=True, moderation_model_name=None),
+    )
+    monkeypatch.setattr(skills_ext, "_get_storage", lambda _cfg: storage)
+    monkeypatch.setattr(skills_ext, "get_effective_user_id", lambda: "default")
+    monkeypatch.setattr(skills_ext, "refresh_user_skills_system_prompt_cache_async", lambda _uid: None)
+
+    app = make_authed_test_app(user_factory=_make_admin_user)
+    app.state.config = config
+    app.dependency_overrides[get_config] = lambda: config
+    app.include_router(skills_ext.router)
+
+    with TestClient(app) as client:
+        listing = client.get("/api/skills/foo/files")
+        assert listing.status_code == 200, listing.text
+        # Admin may edit built-in skills (promoted to a writable shadow on save).
+        assert listing.json()["can_edit"] is True
+
+        new_content = _skill_content("foo", "Admin-edited built-in")
+        resp = client.put("/api/skills/foo/files/SKILL.md", json={"content": new_content})
+        assert resp.status_code == 200, resp.text
+
+        # Original built-in directory is left untouched.
+        assert (public_dir / "SKILL.md").read_text(encoding="utf-8") == _skill_content("foo", "Built-in skill")
+
+        # The edit landed in a writable custom shadow copy (same name).
+        shadows = list(tmp_path.glob("**/custom/foo/SKILL.md"))
+        assert shadows, "expected a promoted custom shadow copy"
+        assert shadows[0].read_text(encoding="utf-8") == new_content
+
+
 def test_update_skill_refreshes_prompt_cache_before_return(monkeypatch, tmp_path):
     config_path = tmp_path / "extensions_config.json"
     enabled_state = {"value": True}

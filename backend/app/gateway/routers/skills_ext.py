@@ -560,6 +560,7 @@ async def import_skill_package(
 
             async def _auto_metadata() -> None:
                 try:
+
                     def _read() -> str:
                         return skill.skill_file.read_text(encoding="utf-8")
 
@@ -840,7 +841,6 @@ def _writable_skill_dir(skill: Any, config: AppConfig) -> Path:
     return shadow
 
 
-
 @router.get(
     "/skills/{skill_name}/files",
     response_model=SkillFilesResponse,
@@ -858,13 +858,7 @@ async def list_skill_files(
         files = svc_list_files(_effective_skill_dir(skill, config))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    scope = (
-        "public"
-        if skill.category == SkillCategory.PUBLIC
-        else "legacy"
-        if skill.category == SkillCategory.LEGACY
-        else "user"
-    )
+    scope = "public" if skill.category == SkillCategory.PUBLIC else "legacy" if skill.category == SkillCategory.LEGACY else "user"
     return SkillFilesResponse(
         skill_name=skill.name,
         scope=scope,
@@ -893,9 +887,7 @@ async def read_skill_file(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return SkillFileContentResponse(
-        path=fc.path, content=fc.content, language=fc.language, size=fc.size
-    )
+    return SkillFileContentResponse(path=fc.path, content=fc.content, language=fc.language, size=fc.size)
 
 
 @router.put(
@@ -1080,14 +1072,8 @@ async def debug_run_skill(
 
         param_text = ""
         if body.parameters:
-
-            param_text = "\n\n参数:\n" + "\n".join(
-                f"- {k}: {v}" for k, v in body.parameters.items()
-            )
-        user_message = (
-            f"请使用 {skill.name} 技能完成以下任务:\n{body.prompt}{param_text}\n\n"
-            f"提示: 请先读取技能 {skill.name} 的 SKILL.md, 然后按照其中的指引执行。"
-        )
+            param_text = "\n\n参数:\n" + "\n".join(f"- {k}: {v}" for k, v in body.parameters.items())
+        user_message = f"请使用 {skill.name} 技能完成以下任务:\n{body.prompt}{param_text}\n\n提示: 请先读取技能 {skill.name} 的 SKILL.md, 然后按照其中的指引执行。"
 
         run_body = RunCreateRequest(
             input={"messages": [{"role": "user", "content": user_message}]},
@@ -1119,11 +1105,7 @@ async def debug_run_skill(
                 content=_debug_extract_content(msg.get("content", "")),
             )
             if msg.get("tool_calls"):
-                entry.tool_calls = [
-                    {"name": tc.get("name", ""), "args": tc.get("args", {})}
-                    for tc in msg["tool_calls"]
-                    if isinstance(tc, dict)
-                ]
+                entry.tool_calls = [{"name": tc.get("name", ""), "args": tc.get("args", {})} for tc in msg["tool_calls"] if isinstance(tc, dict)]
             if msg.get("name"):
                 entry.name = str(msg["name"])
             if msg.get("status"):
@@ -1245,9 +1227,7 @@ async def list_skill_evolution_history(
 
     skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
     records = list_records(_effective_skill_dir(skill, config))
-    return SkillEvolutionHistoryResponse(
-        records=[_evolution_record_to_model(r) for r in records]
-    )
+    return SkillEvolutionHistoryResponse(records=[_evolution_record_to_model(r) for r in records])
 
 
 @router.get(

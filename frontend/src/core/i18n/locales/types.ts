@@ -49,6 +49,7 @@ export interface Translations {
     showArtifacts: string;
     browser: string;
     showBrowser: string;
+    openInNewTab: string;
   };
 
   runDuration: {

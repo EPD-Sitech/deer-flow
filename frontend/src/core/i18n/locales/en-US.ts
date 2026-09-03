@@ -61,6 +61,7 @@ export const enUS: Translations = {
     showArtifacts: "Show artifacts of this conversation",
     browser: "Browser",
     showBrowser: "Open browser panel",
+    openInNewTab: "Open in new tab",
   },
 
   runDuration: {

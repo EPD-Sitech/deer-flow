@@ -768,18 +768,77 @@ async def create_empty_skill(
 
 
 def _skill_can_edit(skill: Any, request: Request) -> bool:
-    """Whether the caller may edit this skill's files (custom skills, or any
-    skill for admins — matching the public-skill admin management behaviour)."""
+    """Whether the caller may edit this skill's files.
+
+    CUSTOM (user-scoped) skills are always editable. Built-in ``PUBLIC`` and
+    managed ``INTEGRATION`` skills ship inside (often read-only) deployment
+    images, and ``LEGACY`` global-custom skills are shared read-only files;
+    admins may still edit them — the write path transparently promotes the
+    skill into a writable custom shadow copy (see ``_writable_skill_dir``),
+    which overrides the original by name.
+    """
     if skill.category == SkillCategory.CUSTOM:
         return True
     return request_is_admin(request)
 
 
-def _skill_dir_of(skill: Any) -> Path:
-    skill_dir = getattr(skill, "skill_dir", None)
-    if skill_dir is None or not Path(skill_dir).is_dir():
+def _custom_shadow_dir(skill: Any, config: AppConfig) -> Path:
+    """Writable custom-root directory that can shadow ``skill`` by name."""
+    storage = _get_storage(config)
+    return Path(storage.get_custom_skill_dir(skill.name))
+
+
+def _effective_skill_dir(skill: Any, config: AppConfig) -> Path:
+    """Directory to READ a skill's files from.
+
+    CUSTOM skills use their own directory. Built-in PUBLIC / managed
+    INTEGRATION / shared LEGACY skills may live in a read-only location; when
+    an editable custom shadow copy (same name, under the writable custom root)
+    already exists it is preferred so reads reflect prior edits.
+    """
+    original = getattr(skill, "skill_dir", None)
+    if original is None or not Path(original).is_dir():
         raise HTTPException(status_code=404, detail="技能目录不存在")
-    return Path(skill_dir)
+    if skill.category == SkillCategory.CUSTOM:
+        return Path(original)
+    try:
+        shadow = _custom_shadow_dir(skill, config)
+    except Exception:
+        logger.debug("Could not resolve custom shadow dir for %s", skill.name, exc_info=True)
+        return Path(original)
+    return shadow if shadow.is_dir() else Path(original)
+
+
+def _writable_skill_dir(skill: Any, config: AppConfig) -> Path:
+    """Directory to WRITE a skill's files into.
+
+    CUSTOM skills use their own (writable) directory. Built-in / shared skills
+    ship in a read-only location (e.g. a container image layer), so the first
+    admin edit promotes the whole skill into a writable custom shadow copy that
+    shadows the original by name; subsequent reads and writes use that copy.
+    """
+    original = getattr(skill, "skill_dir", None)
+    if original is None or not Path(original).is_dir():
+        raise HTTPException(status_code=404, detail="技能目录不存在")
+    if skill.category == SkillCategory.CUSTOM:
+        return Path(original)
+    shadow = _custom_shadow_dir(skill, config)
+    if not shadow.is_dir():
+        try:
+            shutil.copytree(str(original), str(shadow), dirs_exist_ok=True)
+        except OSError as e:
+            logger.error(
+                "Failed to promote skill %s into writable shadow %s: %s",
+                skill.name,
+                shadow,
+                e,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="技能目录只读且无法创建可写副本，请联系管理员确认自定义技能目录可写。",
+            ) from e
+    return shadow
+
 
 
 @router.get(
@@ -796,7 +855,7 @@ async def list_skill_files(
 
     skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
     try:
-        files = svc_list_files(_skill_dir_of(skill))
+        files = svc_list_files(_effective_skill_dir(skill, config))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     scope = (
@@ -829,7 +888,7 @@ async def read_skill_file(
 
     skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
     try:
-        fc = svc_read_file(_skill_dir_of(skill), file_path)
+        fc = svc_read_file(_effective_skill_dir(skill, config), file_path)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -858,7 +917,7 @@ async def save_skill_file(
         raise HTTPException(status_code=403, detail="无编辑权限")
     try:
         result = svc_write_file(
-            _skill_dir_of(skill),
+            _writable_skill_dir(skill, config),
             file_path,
             body.content,
             skill_name=skill.name,
@@ -867,6 +926,12 @@ async def save_skill_file(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except OSError as e:
+        logger.error("Failed to write skill file %s/%s: %s", skill_name, file_path, e)
+        raise HTTPException(
+            status_code=403,
+            detail="技能目录只读或写入失败，无法保存。内置/共享技能为只读，请创建自定义技能来覆盖它。",
+        ) from e
     await _refresh_prompt_cache()
     return SkillFileSaveResponse(path=result.path, size=result.size, version_id=result.version_id)
 
@@ -888,11 +953,17 @@ async def delete_skill_file(
     if not _skill_can_edit(skill, request):
         raise HTTPException(status_code=403, detail="无编辑权限")
     try:
-        result = svc_delete(_skill_dir_of(skill), file_path)
+        result = svc_delete(_writable_skill_dir(skill, config), file_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except OSError as e:
+        logger.error("Failed to delete skill file %s/%s: %s", skill_name, file_path, e)
+        raise HTTPException(
+            status_code=403,
+            detail="技能目录只读或写入失败，无法删除。内置/共享技能为只读，请创建自定义技能来覆盖它。",
+        ) from e
     await _refresh_prompt_cache()
     return SkillFileSaveResponse(path=result.path, size=result.size, version_id=result.version_id)
 
@@ -915,11 +986,17 @@ async def rename_skill_file(
     if not _skill_can_edit(skill, request):
         raise HTTPException(status_code=403, detail="无编辑权限")
     try:
-        result = svc_rename(_skill_dir_of(skill), file_path, body.new_path)
+        result = svc_rename(_writable_skill_dir(skill, config), file_path, body.new_path)
     except (ValueError, FileExistsError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except OSError as e:
+        logger.error("Failed to rename skill file %s/%s -> %s: %s", skill_name, file_path, body.new_path, e)
+        raise HTTPException(
+            status_code=403,
+            detail="技能目录只读或写入失败，无法重命名。内置/共享技能为只读，请创建自定义技能来覆盖它。",
+        ) from e
     await _refresh_prompt_cache()
     return SkillFileRenameResponse(path=result.path, size=result.size, version_id=result.version_id)
 
@@ -939,7 +1016,7 @@ async def list_skill_versions(
     skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
     if not _skill_can_edit(skill, request):
         raise HTTPException(status_code=403, detail="无查看版本权限")
-    versions = svc_list_versions(_skill_dir_of(skill))
+    versions = svc_list_versions(_effective_skill_dir(skill, config))
     return SkillVersionsResponse(
         versions=[
             SkillVersionInfo(
@@ -1092,7 +1169,7 @@ async def restore_skill_version(
     if not _skill_can_edit(skill, request):
         raise HTTPException(status_code=403, detail="无回滚权限")
     try:
-        result = svc_restore(_skill_dir_of(skill), version_id)
+        result = svc_restore(_writable_skill_dir(skill, config), version_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -1141,7 +1218,7 @@ async def propose_skill_evolution(
     try:
         record = await propose_evolution(
             skill.name,
-            _skill_dir_of(skill),
+            _writable_skill_dir(skill, config),
             body.feedback,
         )
     except FileNotFoundError as e:
@@ -1167,7 +1244,7 @@ async def list_skill_evolution_history(
     from app.gateway.skill_evolution_service import list_records
 
     skill = _ensure_skill_exists(config, _safe_skill_name(skill_name))
-    records = list_records(_skill_dir_of(skill))
+    records = list_records(_effective_skill_dir(skill, config))
     return SkillEvolutionHistoryResponse(
         records=[_evolution_record_to_model(r) for r in records]
     )
@@ -1206,7 +1283,7 @@ async def apply_skill_evolution(
     if not _skill_can_edit(skill, request):
         raise HTTPException(status_code=403, detail="无编辑权限")
     try:
-        record = apply_evolution(_skill_dir_of(skill), record_id)
+        record = apply_evolution(_writable_skill_dir(skill, config), record_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -1232,7 +1309,7 @@ async def reject_skill_evolution(
     if not _skill_can_edit(skill, request):
         raise HTTPException(status_code=403, detail="无编辑权限")
     try:
-        record = reject_evolution(_skill_dir_of(skill), record_id)
+        record = reject_evolution(_writable_skill_dir(skill, config), record_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:

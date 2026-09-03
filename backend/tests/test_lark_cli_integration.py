@@ -990,7 +990,7 @@ def test_start_lark_auth_returns_browser_url(monkeypatch, tmp_path):
     assert env["LARKSUITE_CLI_CONFIG_DIR"].endswith("users/alice/integrations/lark-cli/config")
 
 
-def test_start_lark_auth_uses_minimal_login_by_default(monkeypatch, tmp_path):
+def test_start_lark_auth_defaults_to_recommended_scopes(monkeypatch, tmp_path):
     _patch_paths(monkeypatch, tmp_path / "home")
     captured: dict[str, object] = {}
 
@@ -1016,12 +1016,50 @@ def test_start_lark_auth_uses_minimal_login_by_default(monkeypatch, tmp_path):
     result = lark_cli.start_lark_auth("alice")
 
     assert result.verification_url == "https://open.feishu.cn/auth/mock"
+    # Without an explicit --scope the login must request recommended scopes,
+    # otherwise lark-cli fails with "please specify the scopes to authorize".
     assert captured["args"] == [
         "/usr/bin/lark-cli",
         "auth",
         "login",
         "--no-wait",
         "--json",
+        "--recommend",
+    ]
+
+
+def test_start_lark_auth_explicit_scope_suppresses_recommend(monkeypatch, tmp_path):
+    _patch_paths(monkeypatch, tmp_path / "home")
+    captured: dict[str, object] = {}
+
+    def _run(args, **kwargs):
+        captured["args"] = args
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "verification_url": "https://open.feishu.cn/auth/mock",
+                    "device_code": "device-code",
+                    "expires_in": 600,
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(lark_cli.shutil, "which", lambda _name: "/usr/bin/lark-cli")
+    monkeypatch.setattr(lark_cli.subprocess, "run", _run)
+
+    lark_cli.start_lark_auth("alice", scope="calendar:read contact:read")
+
+    assert captured["args"] == [
+        "/usr/bin/lark-cli",
+        "auth",
+        "login",
+        "--no-wait",
+        "--json",
+        "--scope",
+        "calendar:read contact:read",
     ]
 
 

@@ -1168,7 +1168,10 @@ def start_lark_auth(
     """
     path = _require_lark_cli_path()
     args = [path, "auth", "login", "--no-wait", "--json"]
-    if recommend:
+    # lark-cli requires scopes to authorize; without --scope or --recommend it
+    # returns "please specify the scopes to authorize". Default to the official
+    # recommended auto-approve scopes when the caller specified neither.
+    if recommend or not scope:
         args.append("--recommend")
     if scope:
         args.extend(["--scope", scope])

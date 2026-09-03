@@ -170,6 +170,10 @@ async def list_models(
                             model=item["name"],
                             display_name=item.get("display_name") or item["name"],
                             description=None,
+                            # Injected by model_profiles (config.yaml transit.model_profiles);
+                            # forward so 闪速/思考/pro/ultra actually enable for transit models.
+                            supports_thinking=item.get("supports_thinking", False),
+                            supports_reasoning_effort=item.get("supports_reasoning_effort", False),
                         )
                         for item in fetched
                     ]

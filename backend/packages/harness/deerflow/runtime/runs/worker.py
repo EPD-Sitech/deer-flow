@@ -476,7 +476,10 @@ async def _augment_transit_app_config(
     try:
         from deerflow.runtime.transit import augment_app_config, get_transit_catalog
 
-        catalog = await get_transit_catalog(base_url, api_key)
+        extra = getattr(app_config, "model_extra", None) or {}
+        transit_section = extra.get("transit") if isinstance(extra, dict) else None
+        profiles = transit_section.get("model_profiles") if isinstance(transit_section, dict) else None
+        catalog = await get_transit_catalog(base_url, api_key, profiles=profiles)
         return augment_app_config(app_config, catalog)
     except Exception:  # noqa: BLE001 - degrade: fall back to static config, keep the apiKey override
         logger.warning(

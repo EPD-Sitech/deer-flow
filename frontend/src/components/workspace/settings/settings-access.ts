@@ -13,6 +13,9 @@ export type SettingsSection =
 const REGULAR_USER_SETTINGS_SECTIONS: SettingsSection[] = [
   "account",
   "appearance",
+  // 渠道页是嵌入 im-bridge 管理 UI 的 iframe；普通用户进入后只能走
+  // requireBindAuth 绑定自己的微信，运维写操作仍受 IM_BRIDGE_ADMIN_TOKEN 保护。
+  "channels",
 ];
 
 export function getVisibleSettingsSections(isAdmin: boolean) {

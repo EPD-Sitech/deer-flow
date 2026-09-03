@@ -14,6 +14,8 @@ Lives in the harness so the run worker can use it without importing app code.
 
 from __future__ import annotations
 
+import fnmatch
+import json
 import logging
 import time
 from typing import Any
@@ -31,8 +33,8 @@ logger = logging.getLogger(__name__)
 _TRANSIT_MODEL_USE = "deerflow.models.patched_oneai:PatchedChatONEAI"
 _CATALOG_TTL_SECONDS = 60.0
 
-# base_url -> (fetched_at, list[ModelConfig])
-_catalog_cache: dict[str, tuple[float, list[ModelConfig]]] = {}
+# (base_url, profile_signature) -> (fetched_at, list[ModelConfig])
+_catalog_cache: dict[object, tuple[float, list[ModelConfig]]] = {}
 
 
 def _build_headers(api_key: str) -> dict[str, str]:
@@ -79,10 +81,47 @@ async def fetch_transit_model_ids(
     return ids
 
 
-def build_transit_model_configs(base_url: str, model_ids: list[str]) -> list[ModelConfig]:
-    """Build one ModelConfig per transit model id (base_url set, no api_key)."""
-    return [
-        ModelConfig(
+# Capability fields a profile may set on a transit model. Anything else in a
+# profile entry is ignored, so adding new knobs later needs no caller change.
+_PROFILE_CAPABILITY_KEYS = (
+    "supports_thinking",
+    "supports_reasoning_effort",
+    "supports_vision",
+    "when_thinking_enabled",
+    "when_thinking_disabled",
+)
+
+
+def _match_profile(model_id: str, profiles: list[dict] | None) -> dict | None:
+    """Return the first profile whose ``match`` glob matches ``model_id``."""
+    if not profiles:
+        return None
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            continue
+        pattern = profile.get("match")
+        if isinstance(pattern, str) and fnmatch.fnmatch(model_id, pattern):
+            return profile
+    return None
+
+
+def build_transit_model_configs(
+    base_url: str,
+    model_ids: list[str],
+    profiles: list[dict] | None = None,
+) -> list[ModelConfig]:
+    """Build one ModelConfig per transit model id (base_url set, no api_key).
+
+    When ``profiles`` is provided, the first profile whose ``match`` glob matches
+    a model id injects capability fields (``supports_thinking``,
+    ``supports_reasoning_effort``, ``supports_vision``, ``when_thinking_enabled``,
+    ``when_thinking_disabled``) so the 闪速/思考/pro mode stack actually takes
+    effect. Models with no matching profile keep the conservative defaults
+    (thinking off) — e.g. non-thinking variants stay safe.
+    """
+    configs: list[ModelConfig] = []
+    for model_id in model_ids:
+        cfg = ModelConfig(
             name=model_id,
             display_name=model_id,
             use=_TRANSIT_MODEL_USE,
@@ -92,8 +131,13 @@ def build_transit_model_configs(base_url: str, model_ids: list[str]) -> list[Mod
             # 禁用压缩，避免 ChatOpenAI 收到压缩字节导致解析失败（LLM fallback）。
             default_headers={"Accept-Encoding": ""},
         )
-        for model_id in model_ids
-    ]
+        profile = _match_profile(model_id, profiles)
+        if profile:
+            for key in _PROFILE_CAPABILITY_KEYS:
+                if key in profile:
+                    setattr(cfg, key, profile[key])
+        configs.append(cfg)
+    return configs
 
 
 async def get_transit_catalog(
@@ -101,26 +145,47 @@ async def get_transit_catalog(
     api_key: str,
     *,
     ttl: float = _CATALOG_TTL_SECONDS,
+    profiles: list[dict] | None = None,
 ) -> list[ModelConfig]:
     """Return the cached transit model catalog for a relay, fetching on miss.
 
-    Cached globally by ``base_url`` (the relay's model list is the same for
-    every user; only apiKey differs). A failed fetch is not cached and raises.
+    Cached globally by ``(base_url, profile_signature)`` (the relay's model list
+    is the same for every user; only apiKey differs). ``profiles`` influence the
+    built ModelConfigs, so they are part of the cache key — changing the
+    capability profile refreshes the catalog. A failed fetch is not cached and
+    raises.
     """
+    cache_key = (base_url, _profile_signature(profiles))
     now = time.monotonic()
-    cached = _catalog_cache.get(base_url)
+    cached = _catalog_cache.get(cache_key)
     if cached is not None and now - cached[0] < ttl:
         return cached[1]
 
     ids = await fetch_transit_model_ids(base_url, api_key)
-    models = build_transit_model_configs(base_url, ids)
-    _catalog_cache[base_url] = (now, models)
+    models = build_transit_model_configs(base_url, ids, profiles)
+    _catalog_cache[cache_key] = (now, models)
     return models
 
 
+def _profile_signature(profiles: list[dict] | None) -> str:
+    """Stable signature for the catalog cache key."""
+    if not profiles:
+        return ""
+    try:
+        return json.dumps(profiles, sort_keys=True, ensure_ascii=False)
+    except TypeError:
+        return str(profiles)
+
+
 def invalidate_transit_catalog(base_url: str) -> None:
-    """Drop the cached catalog for a relay (used by the refresh endpoint)."""
-    _catalog_cache.pop(base_url, None)
+    """Drop the cached catalog for a relay (used by the refresh endpoint).
+
+    The cache key is ``(base_url, profile_signature)``, so every signature
+    variant for this relay is cleared.
+    """
+    for key in list(_catalog_cache.keys()):
+        if isinstance(key, tuple) and key[0] == base_url:
+            _catalog_cache.pop(key, None)
 
 
 def augment_app_config(app_config: Any, catalog: list[ModelConfig]) -> Any:

@@ -8,7 +8,7 @@ router. No schema/``config_version`` change is needed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from deerflow.config.app_config import AppConfig, get_app_config
@@ -29,6 +29,10 @@ class TransitConfig:
     """oneai 中转站配置（config.yaml -> transit）。"""
 
     base_url: str = "https://oneai.teamshub.com/v1"
+    # Per-model capability overrides matched by id glob (fnmatch). Used to attach
+    # supports_thinking / when_thinking_* to the dynamic oneai catalog so the
+    # 闪速/思考/pro mode stack actually takes effect (see runtime/transit.py).
+    model_profiles: list[dict] = field(default_factory=list)
 
 
 def _extra_section(config: AppConfig, key: str) -> dict[str, Any]:
@@ -59,9 +63,12 @@ def get_oncon_app_config() -> OnconAppConfig:
 def get_transit_config() -> TransitConfig:
     """Read ``transit`` from config.yaml (no env override)."""
     section = _extra_section(get_app_config(), "transit")
+    raw_profiles = section.get("model_profiles")
+    profiles = raw_profiles if isinstance(raw_profiles, list) else []
     return TransitConfig(
         base_url=_as_str(section.get("base_url") or section.get("baseurl"))
-        or "https://oneai.teamshub.com/v1"
+        or "https://oneai.teamshub.com/v1",
+        model_profiles=profiles,
     )
 
 

@@ -71,7 +71,84 @@ class TestBuildTransitModelConfigs:
         assert m.name == "a"
         assert m.model == "a"
         assert m.base_url == "https://oneai.teamshub.com/v1"
-        assert m.use == "langchain_openai:ChatOpenAI"
+        assert m.use == "deerflow.models.patched_oneai:PatchedChatONEAI"
+        # No profile -> conservative defaults, no api_key embedded.
+        assert not hasattr(m, "api_key")
+        assert m.supports_thinking is False
+
+    def test_profiles_inject_capability_fields_by_glob(self):
+        """A matched profile injects only its declared capability keys."""
+        profiles = [
+            {
+                "match": "deepseek-v4*",
+                "supports_thinking": True,
+                "supports_reasoning_effort": True,
+                "when_thinking_enabled": {"extra_body": {"thinking": {"type": "enabled"}}},
+                "when_thinking_disabled": {"extra_body": {"thinking": {"type": "disabled"}}},
+            },
+            {
+                "match": "glm-*",
+                "supports_thinking": True,
+                "when_thinking_enabled": {"extra_body": {"thinking": {"type": "enabled"}}},
+            },
+        ]
+        models = build_transit_model_configs(
+            "https://oneai.teamshub.com/v1",
+            ["deepseek-v4-flash--1.0x", "glm-5.2", "nines-n3.1"],
+            profiles,
+        )
+        by_id = {m.name: m for m in models}
+
+        ds = by_id["deepseek-v4-flash--1.0x"]
+        assert ds.supports_thinking is True
+        assert ds.supports_reasoning_effort is True
+        assert ds.when_thinking_enabled == {"extra_body": {"thinking": {"type": "enabled"}}}
+        assert ds.when_thinking_disabled == {"extra_body": {"thinking": {"type": "disabled"}}}
+
+        glm = by_id["glm-5.2"]
+        assert glm.supports_thinking is True
+        assert glm.supports_reasoning_effort is False
+        assert glm.when_thinking_enabled == {"extra_body": {"thinking": {"type": "enabled"}}}
+        # glm profile has no when_thinking_disabled key -> stays at default None.
+        assert glm.when_thinking_disabled is None
+
+        # No matching profile -> stays conservative (thinking off).
+        nines = by_id["nines-n3.1"]
+        assert nines.supports_thinking is False
+        assert nines.when_thinking_enabled is None
+
+    def test_unknown_profile_keys_are_ignored(self):
+        """Only _PROFILE_CAPABILITY_KEYS are applied; stray keys don't leak."""
+        profiles = [{"match": "*", "supports_thinking": True, "bogus_key": "x"}]
+        models = build_transit_model_configs("https://oneai.teamshub.com/v1", ["m1"], profiles)
+        m = models[0]
+        assert m.supports_thinking is True
+        assert not hasattr(m, "bogus_key")
+
+    def test_profiles_none_is_safe(self):
+        models = build_transit_model_configs("https://oneai.teamshub.com/v1", ["m1"], None)
+        assert models[0].use == "deerflow.models.patched_oneai:PatchedChatONEAI"
+
+    def test_nines_non_thinking_profile_is_explicit(self):
+        """Nines-* is a verified non-thinking variant: listing it explicitly as
+        supports_thinking=false keeps 思考/pro modes degrading to 闪速 instead of
+        silently sending thinking params the model ignores."""
+        profiles = [
+            {
+                "match": "Nines-*",
+                "supports_thinking": False,
+                "supports_reasoning_effort": False,
+            },
+        ]
+        models = build_transit_model_configs(
+            "https://oneai.teamshub.com/v1", ["Nines-N3.1--限时免费"], profiles
+        )
+        m = models[0]
+        assert m.supports_thinking is False
+        assert m.supports_reasoning_effort is False
+        # No thinking params injected -> when_thinking_enabled stays default None.
+        assert m.when_thinking_enabled is None
+        assert m.when_thinking_disabled is None
 
 
 class TestGetTransitCatalogCache:

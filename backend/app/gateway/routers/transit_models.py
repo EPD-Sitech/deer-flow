@@ -41,6 +41,7 @@ class TransitModelInfo(BaseModel):
     description: str | None = Field(None, description="Optional description")
     supports_thinking: bool = Field(default=False, description="Whether thinking mode is supported")
     supports_reasoning_effort: bool = Field(default=False, description="Whether reasoning effort is supported")
+    free: bool = Field(default=False, description="True when the model name/display shows '免费' — surfaced first by the backend")
 
 
 class TransitModelsResponse(BaseModel):
@@ -71,6 +72,11 @@ def _transit_model_info(item: dict[str, Any]) -> TransitModelInfo:
         # "免费" models are surfaced first by the service layer; echo the flag so
         # the UI can mark/select them without re-deriving the rule.
         free=bool(item.get("free")),
+        # Capability flags (thinking / reasoning_effort) are injected onto the
+        # catalog ModelConfig by model_profiles; forward them so the mode stack
+        # (闪速/思考/pro/ultra) actually enables for transit models.
+        supports_thinking=bool(item.get("supports_thinking")),
+        supports_reasoning_effort=bool(item.get("supports_reasoning_effort")),
     )
 
 

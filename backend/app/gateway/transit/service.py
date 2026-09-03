@@ -96,8 +96,9 @@ async def fetch_transit_models(yx_uuid: str) -> list[dict[str, Any]]:
         raise HTTPException(status_code=503, detail="用户未配置模型凭证（has_api_key=false）")
 
     base_url = get_transit_config().base_url
+    profiles = get_transit_config().model_profiles
     try:
-        catalog = await get_transit_catalog(base_url, api_key)
+        catalog = await get_transit_catalog(base_url, api_key, profiles=profiles)
     except Exception as exc:  # noqa: BLE001 - surface as 503 so the router can degrade
         raise HTTPException(status_code=503, detail=f"获取模型列表失败：{exc}") from exc
 
@@ -114,6 +115,10 @@ async def fetch_transit_models(yx_uuid: str) -> list[dict[str, Any]]:
             "display_name": model.display_name or model.name,
             "supported_endpoint_types": ["openai"],
             "free": "免费" in (model.name or "") or "免费" in (model.display_name or model.name),
+            # Injected by model_profiles (config.yaml transit.model_profiles);
+            # forwarded to the frontend so 闪速/思考/pro/ultra actually enable.
+            "supports_thinking": model.supports_thinking,
+            "supports_reasoning_effort": model.supports_reasoning_effort,
         }
         for model in sorted_catalog
     ]

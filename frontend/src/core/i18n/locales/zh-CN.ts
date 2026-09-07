@@ -639,16 +639,19 @@ export const zhCN: Translations = {
 
   // Avatar (browser-side VRM digital human)
   avatar: {
-    title: "数字人",
-    expand: "显示数字人",
-    collapse: "隐藏数字人",
+    title: "AI小易",
+    expand: "显示AI小易",
+    collapse: "隐藏AI小易",
     upload: "上传 VRM 模型",
     resetModel: "恢复默认模型",
     loading: "模型加载中…",
     modelMissing: "还没有 VRM 模型，上传一个即可开始。",
     loadFailed: "VRM 模型加载失败。",
     mouthUnsupported: "该模型不支持口型表情。",
+    pause: "暂停朗读",
+    resume: "继续朗读",
     stop: "停止朗读",
+    paused: "已暂停",
     speaking: "朗读中…",
     enableAudio: "点击开启语音",
     ttsFailed: "语音合成失败。",

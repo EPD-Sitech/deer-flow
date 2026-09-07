@@ -8,8 +8,7 @@ import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { AvatarDock } from "@/components/workspace/avatar";
-import { BrowserTrigger } from "@/components/workspace/browser-view";
-import { ContextUsageBadge } from "@/components/workspace/context-usage-badge";
+import { BrowserTrigger } from "@/components/workspace/browser-view";import { ContextUsageBadge } from "@/components/workspace/context-usage-badge";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
 import { GoalStatus } from "@/components/workspace/goal-status";
 import {
@@ -33,6 +32,7 @@ import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
 import { useActiveGoal } from "@/components/workspace/use-active-goal";
 import { Welcome } from "@/components/workspace/welcome";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useBrowserControlEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -66,6 +66,8 @@ import { useThreadChat } from "./use-thread-chat";
 export default function ChatPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.system_role === "admin";
   const { threadId, setThreadId, isNewThread, setIsNewThread, isMock } =
     useThreadChat();
   // `isNewThread` tracks whether the backend has the thread yet — gates the
@@ -470,7 +472,7 @@ export default function ChatPage() {
             </main>
           </div>
         </ChatBox>
-        <AvatarDock />
+        {isAdmin ? <AvatarDock /> : null}
       </SidecarProvider>
     </ThreadContext.Provider>
   );

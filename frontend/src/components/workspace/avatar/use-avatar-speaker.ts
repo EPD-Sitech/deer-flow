@@ -111,6 +111,14 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
     }
   }, [getQueue, isLoading, lastAi]);
 
+  const pause = useCallback(() => {
+    getQueue().pause();
+  }, [getQueue]);
+
+  const resume = useCallback(() => {
+    getQueue().resume();
+  }, [getQueue]);
+
   const stop = useCallback(() => {
     getQueue().stop();
   }, [getQueue]);
@@ -124,7 +132,7 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
     [],
   );
 
-  return { state, error, stop, unlock, getMouthOpen };
+  return { state, error, pause, resume, stop, unlock, getMouthOpen };
 }
 
 /**

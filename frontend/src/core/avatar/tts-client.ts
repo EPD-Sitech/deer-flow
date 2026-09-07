@@ -6,6 +6,8 @@ export type SpeechState =
   | "idle"
   | "loading"
   | "speaking"
+  /** Playback was paused by the user; call `resume()` to continue. */
+  | "paused"
   /** Autoplay was blocked and a user gesture is required. */
   | "blocked"
   | "error";
@@ -57,6 +59,14 @@ export class SpeechQueue {
   private state: SpeechState = "idle";
   private fallbackSeconds = 0;
   private fallbackStartedAt = 0;
+  /**
+   * Handle for the guard timer of the chunk currently being played. Cleared
+   * while paused so a long pause cannot resolve the finished promise and let
+   * the drain loop (and the revoke of the current URL) continue on its own.
+   */
+  private playTimer: number | null = null;
+  /** `finish` resolver for the chunk currently being played, if any. */
+  private playFinish: (() => void) | null = null;
 
   constructor(callbacks: SpeechQueueCallbacks = {}) {
     this.callbacks = callbacks;
@@ -108,6 +118,8 @@ export class SpeechQueue {
     this.pending = [];
     this.fallbackSeconds = 0;
 
+    this.clearPlayTimer();
+
     // Release anyone parked on the unlock prompt.
     const waiters = this.unlockWaiters.splice(0);
     for (const waiter of waiters) {
@@ -123,6 +135,71 @@ export class SpeechQueue {
 
     this.revokeAll();
     this.setState("idle");
+  }
+
+  /**
+   * Pause playback and hold the position so a later `resume()` continues from
+   * where it stopped instead of restarting from scratch.
+   *
+   * If audio for the current chunk is already loaded, the element is paused in
+   * place (HTMLAudioElement remembers `currentTime`), the drain loop keeps its
+   * connection and `resume()` simply calls `play()` again. If we paused while
+   * a chunk was still being fetched (`loading`), there is no in-flight audio to
+   * restore, so the current fetch chain is stopped instead (keeping `pending`
+   * intact) and `resume()` restarts draining.
+   */
+  pause(): void {
+    if (this.state !== "speaking" && this.state !== "loading") {
+      return;
+    }
+    const audio = this.audio;
+    const hasLiveAudio =
+      !!audio &&
+      !!audio.src &&
+      !audio.ended &&
+      audio.currentTime > 0 &&
+      audio.currentTime < (audio.duration || Infinity);
+    if (hasLiveAudio) {
+      this.clearPlayTimer();
+      audio.pause();
+      this.setState("paused");
+      return;
+    }
+    // No playable audio yet (still fetching): stop this fetch chain but keep
+    // the queued chunks for `resume()`.
+    this.drainToken += 1;
+    this.controller?.abort();
+    this.controller = null;
+    this.setState("paused");
+  }
+
+  /** Resume playback after `pause()`, continuing from the paused position. */
+  resume(): void {
+    if (this.state !== "paused") {
+      return;
+    }
+    const audio = this.audio;
+    if (audio?.src && !audio.ended) {
+      void audio.play().catch(() => undefined);
+      void this.engine.resume();
+      // Re-arm the guard timer for the chunk we just resumed.
+      if (this.playTimer === null && this.playFinish) {
+        this.playTimer = window.setTimeout(
+          this.playFinish,
+          PLAYBACK_TIMEOUT_MS,
+        );
+      }
+      this.setState("speaking");
+      return;
+    }
+    this.drain();
+  }
+
+  private clearPlayTimer(): void {
+    if (this.playTimer !== null) {
+      window.clearTimeout(this.playTimer);
+      this.playTimer = null;
+    }
   }
 
   dispose(): void {
@@ -169,6 +246,9 @@ export class SpeechQueue {
    * running loop exit as soon as it returns from whatever it was awaiting.
    */
   private drain(): void {
+    if (this.state === "paused") {
+      return;
+    }
     if (this.activeLoopToken === this.drainToken) {
       return;
     }
@@ -240,21 +320,41 @@ export class SpeechQueue {
     this.fallbackSeconds = estimateSpeechSeconds(text, settings.rate);
     this.fallbackStartedAt = performance.now();
 
-    await new Promise<void>((resolve) => {
-      const finish = () => {
-        audio.removeEventListener("ended", finish);
-        audio.removeEventListener("error", finish);
-        window.clearTimeout(timer);
-        resolve();
-      };
-      // Guard against a stalled element that never fires either event.
-      const timer = window.setTimeout(finish, PLAYBACK_TIMEOUT_MS);
-      audio.addEventListener("ended", finish);
-      audio.addEventListener("error", finish);
-    });
+    await this.waitFinished(audio);
 
     this.fallbackSeconds = 0;
     return true;
+  }
+
+  /**
+   * Waits for the current chunk to finish playing (or be aborted). Unlike a
+   * plain local timer, the guard timer's handle is kept on the instance so
+   * `pause()` can suspend it — otherwise a long pause would resolve this
+   * promise via the timeout and let the drain loop (and the URL revoke)
+   * proceed on its own.
+   */
+  private waitFinished(audio: HTMLAudioElement): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const finish = () => {
+        audio.removeEventListener("ended", finish);
+        audio.removeEventListener("error", finish);
+        this.clearPlayTimer();
+        if (this.playFinish === finish) {
+          this.playFinish = null;
+        }
+        resolve();
+      };
+      this.playFinish = finish;
+      const armTimer = () => {
+        if (this.playTimer !== null) {
+          window.clearTimeout(this.playTimer);
+        }
+        this.playTimer = window.setTimeout(finish, PLAYBACK_TIMEOUT_MS);
+      };
+      audio.addEventListener("ended", finish);
+      audio.addEventListener("error", finish);
+      armTimer();
+    });
   }
 
   private async attemptPlay(

@@ -5,8 +5,10 @@ import {
   ChevronDownIcon,
   DramaIcon,
   PauseIcon,
+  PlayIcon,
   RotateCcwIcon,
   SparklesIcon,
+  SquareIcon,
   UploadIcon,
   VolumeIcon,
 } from "lucide-react";
@@ -60,12 +62,20 @@ export default function AvatarDock() {
   const [notice, setNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [animationKey, setAnimationKey] = useState<AvatarAnimationKey | typeof ANIMATION_NONE>("fullbody");
+  const [animationKey, setAnimationKey] = useState<AvatarAnimationKey | typeof ANIMATION_NONE>("modelPose");
   const animationUrl =
     AVATAR_ANIMATIONS.find((animation) => animation.key === animationKey)?.url ??
     null;
 
-  const { state, error, stop, unlock, getMouthOpen } = useAvatarSpeaker({
+  const {
+    state,
+    error,
+    pause,
+    resume,
+    stop,
+    unlock,
+    getMouthOpen,
+  } = useAvatarSpeaker({
     voice: dock.voice,
     rate: dock.rate,
     muted: dock.muted,
@@ -239,6 +249,29 @@ export default function AvatarDock() {
           </Tooltip>
         ) : null}
         {isSpeaking ? (
+          <Tooltip content={t.avatar.pause}>
+            <Button
+              aria-label={t.avatar.pause}
+              size="icon-sm"
+              variant="ghost"
+              onClick={pause}
+            >
+              <PauseIcon />
+            </Button>
+          </Tooltip>
+        ) : state === "paused" ? (
+          <Tooltip content={t.avatar.resume}>
+            <Button
+              aria-label={t.avatar.resume}
+              size="icon-sm"
+              variant="ghost"
+              onClick={resume}
+            >
+              <PlayIcon />
+            </Button>
+          </Tooltip>
+        ) : null}
+        {isSpeaking || state === "paused" ? (
           <Tooltip content={t.avatar.stop}>
             <Button
               aria-label={t.avatar.stop}
@@ -246,7 +279,7 @@ export default function AvatarDock() {
               variant="ghost"
               onClick={stop}
             >
-              <PauseIcon />
+              <SquareIcon />
             </Button>
           </Tooltip>
         ) : null}
@@ -366,6 +399,10 @@ export default function AvatarDock() {
         {isSpeaking ? (
           <p className={cn("text-muted-foreground text-[11px]")} role="status">
             {t.avatar.speaking}
+          </p>
+        ) : state === "paused" ? (
+          <p className={cn("text-muted-foreground text-[11px]")} role="status">
+            {t.avatar.paused}
           </p>
         ) : null}
       </div>

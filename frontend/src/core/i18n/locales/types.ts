@@ -561,7 +561,10 @@ export interface Translations {
     modelMissing: string;
     loadFailed: string;
     mouthUnsupported: string;
+    pause: string;
+    resume: string;
     stop: string;
+    paused: string;
     speaking: string;
     enableAudio: string;
     ttsFailed: string;

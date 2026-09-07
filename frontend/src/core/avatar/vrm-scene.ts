@@ -564,13 +564,20 @@ export class VrmScene {
   private frameCamera(vrm: VRM): void {
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const size = box.getSize(new THREE.Vector3());
-    const height = size.y > 0 ? size.y : 1.6;
-    // Full-body framing: centre the whole model vertically and pull the camera
-    // back far enough that the head and feet both stay inside the view. The
+    const fullHeight = size.y > 0 ? size.y : 1.6;
+    // Upper-body framing: centre on the head + torso and zoom in, instead of a
+    // full-body shot. The camera window covers the top ~76% of the model's
+    // height (head, neck, shoulders and chest) so the **whole head stays fully
+    // inside the frame** with a little breathing room above it, while the panel
+    // still reads as a bust/portrait rather than a distant full figure. The
     // base distance is stored and scaled by `zoom` (mouse wheel) each frame.
-    this.camCenterY = box.min.y + height / 2;
-    this.camHeight = height;
-    this.camBaseDistance = Math.max(height * 1.35, 1.6);
+    const windowHeight = fullHeight * 0.76;
+    const topY = box.max.y;
+    // Tuck the frame a touch below the very top of the head so there is a small
+    // margin above the scalp instead of clipping it at the edge of the viewport.
+    this.camCenterY = topY - windowHeight / 2 + fullHeight * 0.12;
+    this.camHeight = windowHeight;
+    this.camBaseDistance = Math.max(windowHeight * 0.9, 0.78);
     this.applyCamera();
   }
 

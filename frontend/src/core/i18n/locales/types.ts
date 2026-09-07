@@ -550,6 +550,37 @@ export interface Translations {
     selectionCrossesMessages: string;
   };
 
+  // Avatar (browser-side VRM digital human)
+  avatar: {
+    title: string;
+    expand: string;
+    collapse: string;
+    upload: string;
+    resetModel: string;
+    loading: string;
+    modelMissing: string;
+    loadFailed: string;
+    mouthUnsupported: string;
+    stop: string;
+    speaking: string;
+    enableAudio: string;
+    ttsFailed: string;
+    tooLarge: string;
+    invalidModel: string;
+    animationLabel: string;
+    animationNone: string;
+    animationNames: Record<
+      | "fullbody"
+      | "greeting"
+      | "peace"
+      | "shoot"
+      | "spin"
+      | "modelPose"
+      | "squat",
+      string
+    >;
+  };
+
   // Channels
   channels: {
     title: string;

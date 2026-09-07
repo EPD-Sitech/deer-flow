@@ -20,13 +20,13 @@ export function parseSubAgentsFromSoul(soulContent: string): SubAgentInfo[] {
   // truncate the first sub-agent and hide the rest. First identify headings
   // that look like actual sub-agent definitions, then use only those headings
   // as boundaries.
-  const headings = Array.from(
-    section.matchAll(/^###\s+(.+?)\s*$/gm),
-  ).map((match) => ({
-    title: match[1]?.trim() ?? "",
-    index: match.index ?? 0,
-    end: (match.index ?? 0) + match[0].length,
-  }));
+  const headings = Array.from(section.matchAll(/^###\s+(.+?)\s*$/gm)).map(
+    (match) => ({
+      title: match[1]?.trim() ?? "",
+      index: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    }),
+  );
   const candidates = headings.filter((heading, index) => {
     const nextHeading = headings[index + 1];
     const body = section.slice(heading.end, nextHeading?.index).trim();
@@ -47,9 +47,10 @@ export function parseSubAgentsFromSoul(soulContent: string): SubAgentInfo[] {
     if (frontmatter?.[1]) {
       const nameMatch = /(?:^|\n)name:\s*(.+)$/.exec(frontmatter[1]);
       name = nameMatch?.[1]?.trim().replace(/^["']|["']$/g, "") ?? "";
-      const toolsMatch = /(?:^|\n)tools:\s*\n([\s\S]*?)(?=\n[a-z_]+:|\n---|$)/.exec(
-        frontmatter[1],
-      );
+      const toolsMatch =
+        /(?:^|\n)tools:\s*\n([\s\S]*?)(?=\n[a-z_]+:|\n---|$)/.exec(
+          frontmatter[1],
+        );
       tools = (toolsMatch?.[1] ?? "")
         .split("\n")
         .map((line) => line.replace(/^-\s*/, "").trim())

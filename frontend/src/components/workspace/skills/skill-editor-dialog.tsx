@@ -111,22 +111,28 @@ export function SkillEditorDialog({
   const sidebarStartX = useRef(0);
   const sidebarStartWidth = useRef(192);
 
-  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    sidebarStartX.current = e.clientX;
-    sidebarStartWidth.current = sidebarWidth;
-    const onMove = (ev: MouseEvent) => {
-      const delta = ev.clientX - sidebarStartX.current;
-      const next = Math.min(Math.max(sidebarStartWidth.current + delta, 120), 480);
-      setSidebarWidth(next);
-    };
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [sidebarWidth]);
+  const handleSidebarResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      sidebarStartX.current = e.clientX;
+      sidebarStartWidth.current = sidebarWidth;
+      const onMove = (ev: MouseEvent) => {
+        const delta = ev.clientX - sidebarStartX.current;
+        const next = Math.min(
+          Math.max(sidebarStartWidth.current + delta, 120),
+          480,
+        );
+        setSidebarWidth(next);
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [sidebarWidth],
+  );
 
   // Queries
   const { data: filesData, isLoading: filesLoading } = useSkillFiles(
@@ -318,12 +324,14 @@ export function SkillEditorDialog({
           <div className="flex items-center justify-between gap-3">
             <DialogTitle className="flex min-w-0 items-center gap-2 text-lg font-semibold text-[#173a5b] dark:text-slate-100">
               <FolderIcon className="size-5 shrink-0 text-sky-500" />
-              <span className="truncate">{skill.display_name ?? skill.name}</span>
+              <span className="truncate">
+                {skill.display_name ?? skill.name}
+              </span>
               <Badge variant="outline" className="text-xs">
                 {filesData?.scope ?? skill.scope}
               </Badge>
               {canEdit ? (
-                <Badge className="bg-green-50 text-green-700 text-xs dark:bg-green-950/60 dark:text-green-300">
+                <Badge className="bg-green-50 text-xs text-green-700 dark:bg-green-950/60 dark:text-green-300">
                   可编辑
                 </Badge>
               ) : (
@@ -458,7 +466,9 @@ export function SkillEditorDialog({
                       onClick={() => setSelectedFile(file.path)}
                     >
                       <FileTextIcon className="size-3.5 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{file.path}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {file.path}
+                      </span>
                       {canEdit && (
                         <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
                           <button
@@ -504,9 +514,7 @@ export function SkillEditorDialog({
                   版本历史（保存/重命名/删除时自动生成，保留最近 20 个）
                 </h3>
                 {versions.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    暂无版本记录
-                  </p>
+                  <p className="text-muted-foreground text-sm">暂无版本记录</p>
                 ) : (
                   <div className="space-y-2">
                     {versions.map((version) => (
@@ -550,7 +558,7 @@ export function SkillEditorDialog({
                         {selectedFile}
                       </span>
                       {hasUnsavedChanges && (
-                        <span className="text-amber-600 text-[11px] font-medium dark:text-amber-400">
+                        <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
                           未保存
                         </span>
                       )}
@@ -575,17 +583,19 @@ export function SkillEditorDialog({
                   </>
                 ) : (
                   <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-                    {files.length === 0 ? "技能目录为空" : "选择左侧文件查看内容"}
+                    {files.length === 0
+                      ? "技能目录为空"
+                      : "选择左侧文件查看内容"}
                   </div>
                 )}
 
                 {/* Debug panel */}
                 {showDebugPanel && (
-                  <div className="flex-shrink-0 border-t bg-muted/20">
+                  <div className="bg-muted/20 flex-shrink-0 border-t">
                     <div className="max-h-80 space-y-3 overflow-y-auto p-4">
                       <div className="flex items-start gap-2">
                         <textarea
-                          className="bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring flex-1 rounded-md border px-3 py-2 text-sm resize-none focus:ring-1 focus:outline-none"
+                          className="bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring flex-1 resize-none rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
                           rows={2}
                           placeholder="输入测试提示词，例如: 分析一下当前项目的代码结构"
                           value={debugPrompt}
@@ -641,7 +651,7 @@ export function SkillEditorDialog({
                           </div>
 
                           {debugOutput.error && (
-                            <pre className="border-red-200 text-red-800 dark:text-red-300 rounded-md border bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-red-950/30">
+                            <pre className="rounded-md border border-red-200 bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap text-red-800 dark:bg-red-950/30 dark:text-red-300">
                               {debugOutput.error}
                             </pre>
                           )}
@@ -649,7 +659,8 @@ export function SkillEditorDialog({
                           <div className="space-y-1.5">
                             {debugOutput.messages
                               .filter(
-                                (m) => m.content || (m.tool_calls?.length ?? 0) > 0,
+                                (m) =>
+                                  m.content || (m.tool_calls?.length ?? 0) > 0,
                               )
                               .map((msg, i) => (
                                 <div
@@ -678,23 +689,25 @@ export function SkillEditorDialog({
                                       </span>
                                     )}
                                   </div>
-                                  {msg.tool_calls && msg.tool_calls.length > 0 && (
-                                    <div className="mb-1 space-y-1">
-                                      {msg.tool_calls.map((tc, j) => (
-                                        <div
-                                          key={j}
-                                          className="text-muted-foreground rounded bg-muted/50 px-2 py-1 font-mono"
-                                        >
-                                          <span className="text-sky-600 dark:text-sky-400">
-                                            {tc.name}
-                                          </span>
-                                          <span className="ml-1 text-muted-foreground/60">
-                                            ({Object.keys(tc.args).join(", ")})
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                                  {msg.tool_calls &&
+                                    msg.tool_calls.length > 0 && (
+                                      <div className="mb-1 space-y-1">
+                                        {msg.tool_calls.map((tc, j) => (
+                                          <div
+                                            key={j}
+                                            className="text-muted-foreground bg-muted/50 rounded px-2 py-1 font-mono"
+                                          >
+                                            <span className="text-sky-600 dark:text-sky-400">
+                                              {tc.name}
+                                            </span>
+                                            <span className="text-muted-foreground/60 ml-1">
+                                              ({Object.keys(tc.args).join(", ")}
+                                              )
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   {msg.content && (
                                     <pre className="text-foreground/80 max-h-40 overflow-auto whitespace-pre-wrap">
                                       {msg.content.length > 2000

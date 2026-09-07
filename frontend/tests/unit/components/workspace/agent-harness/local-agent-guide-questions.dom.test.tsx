@@ -15,9 +15,9 @@ describe("LocalAgentGuideQuestions", () => {
     );
 
     expect(screen.getByText("试试这样问")).toBeTruthy();
-    expect(screen.getByText("试试这样问").closest("section")?.className).toContain(
-      "absolute top-full",
-    );
+    expect(
+      screen.getByText("试试这样问").closest("section")?.className,
+    ).toContain("absolute top-full");
     fireEvent.click(screen.getByRole("button", { name: "帮我分析报告" }));
     expect(onSelect).toHaveBeenCalledWith("分析附件中的报告");
   });
@@ -37,7 +37,9 @@ describe("LocalAgentGuideQuestions", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: "生成旅游攻略 HTML" })).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "生成旅游攻略 HTML" }),
+    ).toHaveLength(2);
     expect(consoleError).not.toHaveBeenCalled();
   });
 });

@@ -414,8 +414,7 @@ export function AgentSettingsDialog({
           : null,
       skills: [...selectedSkills].sort(),
       mcp_servers: [...selectedMcpServers].sort(),
-      category:
-        category === ALL_LOCAL_AGENT_CATEGORY ? "other" : category,
+      category: category === ALL_LOCAL_AGENT_CATEGORY ? "other" : category,
       scope: targetScope,
     };
 
@@ -433,7 +432,10 @@ export function AgentSettingsDialog({
   }
 
   async function handleAvatarUpload(file: File) {
-    if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+    if (
+      !/^image\/(png|jpeg|webp)$/.test(file.type) ||
+      file.size > 5 * 1024 * 1024
+    ) {
       toast.error("请选择 PNG、JPEG 或 WebP 图片，且大小不超过 5MB");
       return;
     }
@@ -445,7 +447,10 @@ export function AgentSettingsDialog({
         `${getBackendBaseURL()}/api/agents/${encodeURIComponent(agent.name)}/avatar?scope=${scope}`,
         { method: "POST", body },
       );
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? "头像上传失败");
+      if (!response.ok)
+        throw new Error(
+          (await response.json().catch(() => null))?.detail ?? "头像上传失败",
+        );
       setAvatarVersion((value) => value + 1);
       notifyAgentAvatarUpdated(agent.name, scope);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -487,7 +492,9 @@ export function AgentSettingsDialog({
                 </p>
               </div>
               <div className="space-y-1">
-                <span className="text-foreground block text-xs font-medium">头像</span>
+                <span className="text-foreground block text-xs font-medium">
+                  头像
+                </span>
                 <div className="flex items-center gap-3 rounded-md border p-2.5">
                   <AgentAvatar
                     name={agent.name}
@@ -497,12 +504,32 @@ export function AgentSettingsDialog({
                     className="size-14 rounded-full object-cover"
                   />
                   <label className="cursor-pointer">
-                    <Button type="button" variant="outline" size="sm" disabled={avatarUploading} asChild>
-                      <span><UploadIcon className="mr-1.5 size-3.5" />{avatarUploading ? "上传中…" : "上传头像"}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={avatarUploading}
+                      asChild
+                    >
+                      <span>
+                        <UploadIcon className="mr-1.5 size-3.5" />
+                        {avatarUploading ? "上传中…" : "上传头像"}
+                      </span>
                     </Button>
-                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAvatarUpload(file); event.target.value = ""; }} />
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleAvatarUpload(file);
+                        event.target.value = "";
+                      }}
+                    />
                   </label>
-                  <span className="text-muted-foreground text-[11px]">未上传时使用系统默认头像</span>
+                  <span className="text-muted-foreground text-[11px]">
+                    未上传时使用系统默认头像
+                  </span>
                 </div>
               </div>
               <div className="space-y-1">
@@ -538,16 +565,18 @@ export function AgentSettingsDialog({
                         className={cn(
                           "rounded-md border p-2.5 text-left transition-all",
                           selected
-                            ? "border-primary/40 bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                            ? "border-primary/40 bg-primary/10 text-primary ring-primary/20 shadow-sm ring-1"
                             : "border-border bg-background text-muted-foreground",
                           disabled
                             ? "cursor-not-allowed opacity-60"
-                            : "cursor-pointer hover:border-primary/30 hover:bg-muted/50",
+                            : "hover:border-primary/30 hover:bg-muted/50 cursor-pointer",
                         )}
                       >
                         <span className="flex items-center justify-between gap-2 text-xs font-semibold">
                           {label}
-                          {selected && <CheckIcon className="size-3.5 shrink-0" />}
+                          {selected && (
+                            <CheckIcon className="size-3.5 shrink-0" />
+                          )}
                         </span>
                         <span className="text-muted-foreground mt-0.5 block text-[10px]">
                           {hint}
@@ -569,8 +598,8 @@ export function AgentSettingsDialog({
             icon={<WrenchIcon className="size-4" />}
             title="专家分类"
             description={
-              LOCAL_AGENT_CATEGORIES.find((item) => item.id === category)?.zhLabel ??
-              "其他"
+              LOCAL_AGENT_CATEGORIES.find((item) => item.id === category)
+                ?.zhLabel ?? "其他"
             }
             open={sectionOpen.category}
             onToggle={() =>
@@ -594,7 +623,7 @@ export function AgentSettingsDialog({
                     className={cn(
                       "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-xs font-medium transition-all",
                       selected
-                        ? "border-primary/40 bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                        ? "border-primary/40 bg-primary/10 text-primary ring-primary/20 shadow-sm ring-1"
                         : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:bg-muted/50 hover:text-foreground",
                     )}
                   >

@@ -637,6 +637,36 @@ export const zhCN: Translations = {
       "选区跨越了多条消息，请在同一条回复内选择要引用的文本。",
   },
 
+  // Avatar (browser-side VRM digital human)
+  avatar: {
+    title: "数字人",
+    expand: "显示数字人",
+    collapse: "隐藏数字人",
+    upload: "上传 VRM 模型",
+    resetModel: "恢复默认模型",
+    loading: "模型加载中…",
+    modelMissing: "还没有 VRM 模型，上传一个即可开始。",
+    loadFailed: "VRM 模型加载失败。",
+    mouthUnsupported: "该模型不支持口型表情。",
+    stop: "停止朗读",
+    speaking: "朗读中…",
+    enableAudio: "点击开启语音",
+    ttsFailed: "语音合成失败。",
+    tooLarge: "模型文件超过 80MB。",
+    invalidModel: "该文件不是 VRM 模型。",
+    animationLabel: "选择动作",
+    animationNone: "无动作",
+    animationNames: {
+      fullbody: "展示全身",
+      greeting: "打招呼",
+      peace: "比耶",
+      shoot: "射击",
+      spin: "转圈",
+      modelPose: "摆姿势",
+      squat: "蹲下",
+    },
+  },
+
   // Channels
   channels: {
     title: "渠道",

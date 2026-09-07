@@ -58,6 +58,9 @@ COPY backend ./backend
 # to Redis (DEER_FLOW_STREAM_BRIDGE_REDIS_URL); it is an optional extra elsewhere
 # so slim non-Docker installs do not pull it.
 # When UV_EXTRAS is set (comma- or whitespace-separated), installs optional dependencies.
+# Frozen mode consumes the committed universal lock verbatim. This prevents an
+# unavailable package in an unselected optional extra from triggering a fresh
+# cross-platform resolution during an otherwise unrelated production build.
 RUN --mount=type=cache,target=/root/.cache/uv \
     sh -c 'cd backend && \
     set -f; \
@@ -71,7 +74,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         esac; \
         extras_flags="$extras_flags --extra $extra"; \
     done; \
-    UV_INDEX_URL=${UV_INDEX_URL:-https://pypi.org/simple} uv sync --locked --extra redis $extras_flags'
+    UV_INDEX_URL=${UV_INDEX_URL:-https://pypi.org/simple} uv sync --frozen --extra redis $extras_flags'
 
 # UTF-8 locale prevents UnicodeEncodeError on Chinese/emoji content in minimal
 # containers where locale configuration may be missing and the default encoding is not UTF-8.
@@ -98,6 +101,15 @@ FROM python:3.12-slim-bookworm
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PYTHONIOENCODING=utf-8
+
+# curl is required by @larksuite/cli's postinstall (scripts/install.js) to fetch
+# the platform binary at runtime — e.g. when an admin reinstall upgrades the
+# managed lark-cli. Without it, `npm install @larksuite/cli` fails with
+# "spawnSync curl ENOENT" and DeerFlow silently falls back to the image-baked
+# version, so the Lark integration version can never be bumped.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy Node.js runtime from builder (provides npx for MCP servers)
 COPY --from=builder /usr/bin/node /usr/bin/node

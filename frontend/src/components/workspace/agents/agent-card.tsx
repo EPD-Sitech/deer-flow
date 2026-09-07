@@ -1,12 +1,13 @@
 "use client";
 
-import {
-  MessageSquareIcon,
-  Settings2Icon,
-  Trash2Icon,
-} from "lucide-react";
+import { MessageSquareIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ComponentProps, type ReactElement, useEffect, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactElement,
+  useEffect,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -120,11 +121,14 @@ export function AgentCard({ agent }: AgentCardProps) {
   const [avatarVersion, setAvatarVersion] = useState(0);
   useEffect(() => {
     const handleUpdate = (event: Event) => {
-      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
-      if (detail?.name === agent.name && detail.scope === "user") setAvatarVersion((value) => value + 1);
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>)
+        .detail;
+      if (detail?.name === agent.name && detail.scope === "user")
+        setAvatarVersion((value) => value + 1);
     };
     window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
-    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () =>
+      window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
   }, [agent.name]);
 
   function handleChat() {

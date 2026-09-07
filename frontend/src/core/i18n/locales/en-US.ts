@@ -666,6 +666,36 @@ export const enUS: Translations = {
       "Selection spans multiple messages. Select text within a single reply to quote it.",
   },
 
+  // Avatar (browser-side VRM digital human)
+  avatar: {
+    title: "Digital human",
+    expand: "Show digital human",
+    collapse: "Hide digital human",
+    upload: "Upload VRM",
+    resetModel: "Restore default model",
+    loading: "Loading model…",
+    modelMissing: "No VRM model yet. Upload one to get started.",
+    loadFailed: "Failed to load the VRM model.",
+    mouthUnsupported: "This model has no mouth expressions.",
+    stop: "Stop speaking",
+    speaking: "Speaking…",
+    enableAudio: "Click to enable audio",
+    ttsFailed: "Speech synthesis failed.",
+    tooLarge: "That model is larger than 80MB.",
+    invalidModel: "That file is not a VRM model.",
+    animationLabel: "Choose a motion",
+    animationNone: "No motion",
+    animationNames: {
+      fullbody: "Show full body",
+      greeting: "Greeting",
+      peace: "Peace sign",
+      shoot: "Shoot",
+      spin: "Spin",
+      modelPose: "Model pose",
+      squat: "Squat",
+    },
+  },
+
   // Channels
   channels: {
     title: "Channels",

@@ -29,7 +29,7 @@ export function WorkspaceBrand({ className }: { className?: string }) {
       />
       {!collapsed && (
         <div className="flex min-w-0 flex-col">
-          <span className="text-foreground whitespace-nowrap text-[15px] leading-tight font-semibold tracking-wide">
+          <span className="text-foreground text-[15px] leading-tight font-semibold tracking-wide whitespace-nowrap">
             易信 Trade AI
           </span>
           <span className="text-[9px] text-[#94a3b8] dark:text-slate-400">

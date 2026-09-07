@@ -109,11 +109,17 @@ export default function AgentChatPage() {
   const [avatarVersion, setAvatarVersion] = useState(0);
   useEffect(() => {
     const handleUpdate = (event: Event) => {
-      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
-      if (detail?.name === (catalogAgent?.name ?? agent_name) && detail.scope === avatarScope) setAvatarVersion((value) => value + 1);
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>)
+        .detail;
+      if (
+        detail?.name === (catalogAgent?.name ?? agent_name) &&
+        detail.scope === avatarScope
+      )
+        setAvatarVersion((value) => value + 1);
     };
     window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
-    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () =>
+      window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
   }, [agent_name, avatarScope, catalogAgent?.name]);
   const agentDisplayName =
     effectiveAgent?.display_name ?? effectiveAgent?.name ?? agent_name;
@@ -382,7 +388,7 @@ export default function AgentChatPage() {
             <main
               className={cn(
                 "flex min-h-0 max-w-full grow flex-col",
-                isWelcomeMode && "overflow-y-auto overflow-x-hidden",
+                isWelcomeMode && "overflow-x-hidden overflow-y-auto",
               )}
             >
               <div

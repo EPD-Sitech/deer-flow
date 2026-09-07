@@ -27,18 +27,27 @@ const SPECIAL_AVATARS: Record<string, string> = {
 };
 
 function hashName(name: string) {
-  return Array.from(name).reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 7);
+  return Array.from(name).reduce(
+    (hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0,
+    7,
+  );
 }
 
 export function getDefaultAgentAvatar(name: string) {
   return `/images/agent-avatars/${SPECIAL_AVATARS[name] ?? DEFAULT_AVATARS[hashName(name) % DEFAULT_AVATARS.length]}`;
 }
 
-export function getAgentAvatarUrl(name: string, scope: "user" | "platform" = "user") {
+export function getAgentAvatarUrl(
+  name: string,
+  scope: "user" | "platform" = "user",
+) {
   return `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}/avatar?scope=${scope}`;
 }
 
-export function notifyAgentAvatarUpdated(name: string, scope: "user" | "platform") {
+export function notifyAgentAvatarUpdated(
+  name: string,
+  scope: "user" | "platform",
+) {
   window.dispatchEvent(
     new CustomEvent(AGENT_AVATAR_UPDATED_EVENT, { detail: { name, scope } }),
   );
@@ -60,7 +69,11 @@ export function AgentAvatar({
     <img
       {...props}
       alt={props.alt ?? ""}
-      src={failed ? getDefaultAgentAvatar(name) : `${getAgentAvatarUrl(name, scope)}&v=${version}`}
+      src={
+        failed
+          ? getDefaultAgentAvatar(name)
+          : `${getAgentAvatarUrl(name, scope)}&v=${version}`
+      }
       onLoad={(event) => {
         if (event.currentTarget.naturalWidth === 0) setFailedVersion(version);
       }}

@@ -81,8 +81,11 @@ import { useI18n } from "@/core/i18n/hooks";
 import { polishInputDraft } from "@/core/input-polish/api";
 import { isHiddenFromUIMessage } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
+import {
+  refreshTransitModels,
+  setDefaultTransitModel,
+} from "@/core/models/transit";
 import { saveThreadModelName } from "@/core/settings/local";
-import { refreshTransitModels, setDefaultTransitModel } from "@/core/models/transit";
 import {
   buildReferenceMessageMetadata,
   type SidecarContext,
@@ -786,7 +789,12 @@ export function InputBox({
   // jump to the new-chat page with the skill pre-selected in the input box.
   const skillParam = searchParams.get("skill");
   useEffect(() => {
-    if (!skillParam || skillsLoading || selectedSlashSkill || hydratedDraftKey) {
+    if (
+      !skillParam ||
+      skillsLoading ||
+      selectedSlashSkill ||
+      hydratedDraftKey
+    ) {
       return;
     }
     const skill = skills.find(
@@ -882,7 +890,15 @@ export function InputBox({
       }
       setModelDialogOpen(false);
     },
-    [disabled, onContextChange, context, models, polishingInput, isYixinUser, threadId],
+    [
+      disabled,
+      onContextChange,
+      context,
+      models,
+      polishingInput,
+      isYixinUser,
+      threadId,
+    ],
   );
 
   const handleRefreshModels = useCallback(async () => {
@@ -908,7 +924,13 @@ export function InputBox({
       appliedYixinDefaultRef.current = true;
       handleModelSelect(def);
     }
-  }, [isYixinUser, user?.default_model, models, context.model_name, handleModelSelect]);
+  }, [
+    isYixinUser,
+    user?.default_model,
+    models,
+    context.model_name,
+    handleModelSelect,
+  ]);
 
   const handleModeSelect = useCallback(
     (mode: InputMode) => {

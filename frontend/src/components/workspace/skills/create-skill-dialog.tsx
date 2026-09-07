@@ -127,7 +127,10 @@ export function CreateSkillDialog({
                 maxLength={80}
                 className={FIELD_INPUT_CLASS}
               />
-              <label htmlFor="cs-display" className={`mt-[13px] ${FIELD_LABEL_CLASS}`}>
+              <label
+                htmlFor="cs-display"
+                className={`mt-[13px] ${FIELD_LABEL_CLASS}`}
+              >
                 显示名称（可选）
               </label>
               <Input
@@ -138,7 +141,10 @@ export function CreateSkillDialog({
                 maxLength={120}
                 className={FIELD_INPUT_CLASS}
               />
-              <label htmlFor="cs-desc" className={`mt-[13px] ${FIELD_LABEL_CLASS}`}>
+              <label
+                htmlFor="cs-desc"
+                className={`mt-[13px] ${FIELD_LABEL_CLASS}`}
+              >
                 简介
               </label>
               <Input
@@ -176,7 +182,10 @@ export function CreateSkillDialog({
                   </option>
                 ))}
               </select>
-              <label htmlFor="cs-tags" className={`mt-[13px] ${FIELD_LABEL_CLASS}`}>
+              <label
+                htmlFor="cs-tags"
+                className={`mt-[13px] ${FIELD_LABEL_CLASS}`}
+              >
                 标签（用空格或逗号分隔，可选）
               </label>
               <Input

@@ -47,10 +47,7 @@ import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 
-import {
-  AGENT_AVATAR_UPDATED_EVENT,
-  AgentAvatar,
-} from "./agent-avatar";
+import { AGENT_AVATAR_UPDATED_EVENT, AgentAvatar } from "./agent-avatar";
 import {
   cloneAgent,
   deletePlatformAgent,
@@ -111,11 +108,14 @@ export function LocalAgentCard({
     "scope" in agent && agent.scope === "platform" ? "platform" : "user";
   useEffect(() => {
     const handleUpdate = (event: Event) => {
-      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
-      if (detail?.name === agent.name && detail.scope === scope) setAvatarVersion((value) => value + 1);
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>)
+        .detail;
+      if (detail?.name === agent.name && detail.scope === scope)
+        setAvatarVersion((value) => value + 1);
     };
     window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
-    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () =>
+      window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
   }, [agent.name, scope]);
   const isPlatform = scope === "platform";
   const runtimeName = "runtime_name" in agent ? agent.runtime_name : agent.name;
@@ -242,7 +242,7 @@ export function LocalAgentCard({
   return (
     <>
       <Card
-        className={`group relative h-44 min-w-0 cursor-pointer gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] dark:bg-sidebar-accent dark:hover:bg-accent ${selected ? "ring-2 ring-sky-400" : ""}`}
+        className={`group dark:bg-sidebar-accent dark:hover:bg-accent relative h-44 min-w-0 cursor-pointer gap-0 overflow-hidden rounded-lg border py-0 shadow-[0_9px_22px_-18px_rgba(27,67,104,0.38)] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-22px_rgba(27,67,104,0.32)] ${selected ? "ring-2 ring-sky-400" : ""}`}
         role={canViewDetails ? "button" : undefined}
         tabIndex={canViewDetails ? 0 : undefined}
         onClick={handleCardClick}

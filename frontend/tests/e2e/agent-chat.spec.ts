@@ -117,7 +117,9 @@ test.describe("Agent chat", () => {
 
     await page.goto("/workspace/agents/test-agent/chats/new");
     const welcomeMain = page.locator("main");
-    await expect(page.getByRole("button", { name: "引导问题 1" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "引导问题 1" }),
+    ).toBeVisible();
     await expect
       .poll(() =>
         welcomeMain.evaluate(

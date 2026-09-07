@@ -25,7 +25,7 @@ export function ChannelsSettingsPage() {
       <iframe
         src={IM_BRIDGE_URL}
         title={t.settings.channels.title}
-        className="h-[64vh] w-full rounded-lg border bg-background"
+        className="bg-background h-[64vh] w-full rounded-lg border"
       />
     </SettingsSection>
   );

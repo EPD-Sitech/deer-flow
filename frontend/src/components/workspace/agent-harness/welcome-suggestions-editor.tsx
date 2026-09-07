@@ -64,11 +64,15 @@ export function WelcomeSuggestionsEditor({
 
   function changeMode(next: Mode) {
     setMode(next);
-    onChange(next === "default" ? null : next === "hidden" ? [] : items.map(stripId));
+    onChange(
+      next === "default" ? null : next === "hidden" ? [] : items.map(stripId),
+    );
   }
 
   function updateItem(id: string, patch: Partial<AgentWelcomeSuggestion>) {
-    const next = items.map((item) => (item.id === id ? { ...item, ...patch } : item));
+    const next = items.map((item) =>
+      item.id === id ? { ...item, ...patch } : item,
+    );
     setItems(next);
     onChange(next.map(stripId));
   }
@@ -115,7 +119,7 @@ export function WelcomeSuggestionsEditor({
           <span className="text-muted-foreground text-[10px]">最多 6 条</span>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
+      <div className="bg-muted grid grid-cols-3 gap-1 rounded-md p-1">
         {(
           [
             ["default", "使用默认"],
@@ -155,14 +159,19 @@ export function WelcomeSuggestionsEditor({
       {mode === "custom" && (
         <div className="space-y-2">
           {items.map((item, index) => (
-            <div key={item.id} className="border-border bg-background space-y-2 rounded-md border p-2.5">
+            <div
+              key={item.id}
+              className="border-border bg-background space-y-2 rounded-md border p-2.5"
+            >
               <div className="flex items-center gap-2">
                 <Input
                   value={item.label}
                   readOnly={readOnly}
                   placeholder="显示名称"
                   className="h-8 text-xs"
-                  onChange={(event) => updateItem(item.id, { label: event.target.value })}
+                  onChange={(event) =>
+                    updateItem(item.id, { label: event.target.value })
+                  }
                 />
                 <select
                   value={item.icon}
@@ -176,16 +185,42 @@ export function WelcomeSuggestionsEditor({
                   }
                 >
                   {ICON_OPTIONS.map((icon) => (
-                    <option key={icon.value} value={icon.value}>{icon.label}</option>
+                    <option key={icon.value} value={icon.value}>
+                      {icon.label}
+                    </option>
                   ))}
                 </select>
-                <Button type="button" size="icon" variant="ghost" className="size-8 shrink-0" disabled={readOnly || index === 0} onClick={() => moveItem(index, -1)} aria-label="上移">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 shrink-0"
+                  disabled={readOnly || index === 0}
+                  onClick={() => moveItem(index, -1)}
+                  aria-label="上移"
+                >
                   <ArrowUpIcon className="size-3.5" />
                 </Button>
-                <Button type="button" size="icon" variant="ghost" className="size-8 shrink-0" disabled={readOnly || index === items.length - 1} onClick={() => moveItem(index, 1)} aria-label="下移">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 shrink-0"
+                  disabled={readOnly || index === items.length - 1}
+                  onClick={() => moveItem(index, 1)}
+                  aria-label="下移"
+                >
                   <ArrowDownIcon className="size-3.5" />
                 </Button>
-                <Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive size-8 shrink-0" disabled={readOnly} onClick={() => removeItem(item.id)} aria-label="删除">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive size-8 shrink-0"
+                  disabled={readOnly}
+                  onClick={() => removeItem(item.id)}
+                  aria-label="删除"
+                >
                   <Trash2Icon className="size-3.5" />
                 </Button>
               </div>
@@ -194,13 +229,23 @@ export function WelcomeSuggestionsEditor({
                 readOnly={readOnly}
                 placeholder="点击后填入输入框的提示词，可使用 [] 作为占位符"
                 className="h-8 text-xs"
-                onChange={(event) => updateItem(item.id, { prompt: event.target.value })}
+                onChange={(event) =>
+                  updateItem(item.id, { prompt: event.target.value })
+                }
               />
             </div>
           ))}
           {!readOnly && (
-            <Button type="button" variant="outline" size="sm" className="w-full text-xs" disabled={items.length >= MAX_WELCOME_SUGGESTIONS} onClick={addItem}>
-              <PlusIcon className="mr-1 size-3.5" /> 添加快捷选项（{items.length}/{MAX_WELCOME_SUGGESTIONS}）
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              disabled={items.length >= MAX_WELCOME_SUGGESTIONS}
+              onClick={addItem}
+            >
+              <PlusIcon className="mr-1 size-3.5" /> 添加快捷选项（
+              {items.length}/{MAX_WELCOME_SUGGESTIONS}）
             </Button>
           )}
         </div>

@@ -183,7 +183,7 @@ export function PublicLocalAgentPage({ publicName }: { publicName: string }) {
       <section
         className={cn(
           "flex min-h-0 flex-1 flex-col",
-          isWelcomeMode && "overflow-y-auto overflow-x-hidden",
+          isWelcomeMode && "overflow-x-hidden overflow-y-auto",
         )}
       >
         {!isWelcomeMode && (

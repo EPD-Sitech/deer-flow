@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
+import { AvatarDock } from "@/components/workspace/avatar";
 import { BrowserTrigger } from "@/components/workspace/browser-view";
 import { ContextUsageBadge } from "@/components/workspace/context-usage-badge";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
@@ -469,6 +470,7 @@ export default function ChatPage() {
             </main>
           </div>
         </ChatBox>
+        <AvatarDock />
       </SidecarProvider>
     </ThreadContext.Provider>
   );

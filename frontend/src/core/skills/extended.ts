@@ -110,7 +110,10 @@ export async function updateSkillCategory(
     },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -121,25 +124,36 @@ export async function deleteSkill(skillName: string): Promise<void> {
     { method: "DELETE" },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
 }
 
 export async function batchDeleteSkills(
   skillNames: string[],
 ): Promise<BatchDeleteSkillsResponse> {
-  const response = await fetch(`${getBackendBaseURL()}/api/skills/batch-delete`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ skill_names: skillNames }),
-  });
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/skills/batch-delete`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skill_names: skillNames }),
+    },
+  );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
 
-export async function importSkillPackage(file: File): Promise<InstallSkillResponse> {
+export async function importSkillPackage(
+  file: File,
+): Promise<InstallSkillResponse> {
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetch(`${getBackendBaseURL()}/api/skills/import`, {
@@ -147,7 +161,10 @@ export async function importSkillPackage(file: File): Promise<InstallSkillRespon
     body: formData,
   });
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -161,39 +178,57 @@ export async function exportInstalledSkill(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(name)}/export?${params}`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   const blob = await response.blob();
   const filename =
-    filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
-    `${name}.skill.${format === "md" ? "md" : "zip"}`;
+    filenameFromContentDisposition(
+      response.headers.get("Content-Disposition"),
+    ) ?? `${name}.skill.${format === "md" ? "md" : "zip"}`;
   return { blob, filename };
 }
 
-export async function exportSkillsBatch(names: string[]): Promise<ExportSkillResponse> {
-  const response = await fetch(`${getBackendBaseURL()}/api/skills/batch/export`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ skill_names: names }),
-  });
+export async function exportSkillsBatch(
+  names: string[],
+): Promise<ExportSkillResponse> {
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/skills/batch/export`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skill_names: names }),
+    },
+  );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   const blob = await response.blob();
   const filename =
-    filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
-    "skills-export.zip";
+    filenameFromContentDisposition(
+      response.headers.get("Content-Disposition"),
+    ) ?? "skills-export.zip";
   return { blob, filename };
 }
 
-export async function createSkill(payload: CreateSkillRequest): Promise<CreateSkillResponse> {
+export async function createSkill(
+  payload: CreateSkillRequest,
+): Promise<CreateSkillResponse> {
   const response = await fetch(`${getBackendBaseURL()}/api/skills/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -206,7 +241,10 @@ export async function loadCustomSkillContent(
     `${getBackendBaseURL()}/api/skills/custom/${encodeURIComponent(skillName)}`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -230,7 +268,12 @@ export function useUpdateSkillCategory() {
       displayName?: string;
       category: string;
       tags: string[];
-    }) => updateSkillCategory(skillName, { display_name: displayName, category, tags }),
+    }) =>
+      updateSkillCategory(skillName, {
+        display_name: displayName,
+        category,
+        tags,
+      }),
     onSuccess: () => invalidateSkills(queryClient),
   });
 }
@@ -341,7 +384,10 @@ export async function listSkillFiles(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/files`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -354,7 +400,10 @@ export async function readSkillFileContent(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/files/${encodeFilePath(filePath)}`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -373,7 +422,10 @@ export async function saveSkillFile(
     },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -390,7 +442,10 @@ export async function deleteSkillFile(
     if (response.status === 404) {
       return { path: filePath, size: 0, version_id: "" };
     }
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -409,7 +464,10 @@ export async function renameSkillFile(
     },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -421,7 +479,10 @@ export async function listSkillVersions(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/versions`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -435,7 +496,10 @@ export async function restoreSkillVersion(
     { method: "POST" },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -578,7 +642,10 @@ export async function debugRunSkill(
     },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -633,7 +700,10 @@ export async function proposeSkillEvolution(
     },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -647,7 +717,10 @@ export async function applySkillEvolution(
     { method: "POST" },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -661,7 +734,10 @@ export async function rejectSkillEvolution(
     { method: "POST" },
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -673,7 +749,10 @@ export async function loadSkillEvolutionHistory(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/evolution-history`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }
@@ -685,7 +764,10 @@ export async function loadSkillEvolutionSuggestions(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/evolution-suggestions`,
   );
   if (!response.ok) {
-    throw new SkillRequestError(response.status, await readErrorDetail(response));
+    throw new SkillRequestError(
+      response.status,
+      await readErrorDetail(response),
+    );
   }
   return response.json();
 }

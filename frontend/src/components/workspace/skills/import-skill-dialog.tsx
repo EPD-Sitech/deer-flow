@@ -83,7 +83,7 @@ export function ImportSkillDialog({
         else onOpenChange(true);
       }}
     >
-      <DialogContent className="border-[color:var(--gp-border)] glass-panel">
+      <DialogContent className="glass-panel border-[color:var(--gp-border)]">
         <DialogHeader>
           <DialogTitle>导入技能</DialogTitle>
           <DialogDescription>
@@ -100,10 +100,10 @@ export function ImportSkillDialog({
             onDrop={handleDrop}
           >
             <UploadIcon className="h-8 w-8 text-sky-400" />
-            <p className="text-sm font-medium text-text-secondary">
+            <p className="text-text-secondary text-sm font-medium">
               {file ? file.name : "选择或拖拽技能包到此处"}
             </p>
-            <p className="text-xs text-text-muted">.zip, .skill</p>
+            <p className="text-text-muted text-xs">.zip, .skill</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -119,7 +119,7 @@ export function ImportSkillDialog({
             </p>
           )}
 
-          <p className="text-xs text-text-muted">
+          <p className="text-text-muted text-xs">
             导入后会进行安全扫描，并自动为技能生成中文名称与描述。
           </p>
         </div>
@@ -127,7 +127,7 @@ export function ImportSkillDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            className="border-sky-200 bg-[var(--gp-surface-from)] text-text hover:bg-[var(--gp-surface-from)] hover:text-text"
+            className="text-text hover:text-text border-sky-200 bg-[var(--gp-surface-from)] hover:bg-[var(--gp-surface-from)]"
             onClick={handleClose}
             disabled={importSkillPackage.isPending}
           >

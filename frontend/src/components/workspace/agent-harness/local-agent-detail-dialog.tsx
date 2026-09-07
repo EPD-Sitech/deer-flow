@@ -113,10 +113,7 @@ export function LocalAgentDetailDialog({
   const [subAgentFile, setSubAgentFile] = useState<File | null>(null);
   const [subAgentLoading, setSubAgentLoading] = useState(false);
   const [subAgentOverwrite, setSubAgentOverwrite] = useState(false);
-  const parsedSubAgents = useMemo(
-    () => parseSubAgentsFromSoul(soul),
-    [soul],
-  );
+  const parsedSubAgents = useMemo(() => parseSubAgentsFromSoul(soul), [soul]);
 
   const loadFiles = useCallback(async () => {
     setFilesLoading(true);

@@ -1,6 +1,6 @@
+import { getCsrfHeaders } from "../api/fetcher";
 import { getBackendBaseURL } from "../config";
 import { isStaticWebsiteOnly } from "../static-mode";
-import { getCsrfHeaders } from "../api/fetcher";
 
 /**
  * API client for the Yixin/oneai transit integration.
@@ -41,16 +41,18 @@ export async function refreshTransitModels(): Promise<TransitModelsResponse> {
     headers: getCsrfHeaders(),
   });
   if (!res.ok) {
-    const detail = (await res.json().catch(() => null)) as
-      | { detail?: string }
-      | null;
+    const detail = (await res.json().catch(() => null)) as {
+      detail?: string;
+    } | null;
     throw new Error(detail?.detail ?? "刷新模型列表失败");
   }
   return (await res.json()) as TransitModelsResponse;
 }
 
 /** Persist the user's currently selected model (per-user default). */
-export async function setDefaultTransitModel(model_name: string): Promise<void> {
+export async function setDefaultTransitModel(
+  model_name: string,
+): Promise<void> {
   if (isStaticWebsiteOnly()) return;
 
   await fetch(`${getBackendBaseURL()}/api/users/me/default-model`, {

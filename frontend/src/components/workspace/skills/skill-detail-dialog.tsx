@@ -61,8 +61,7 @@ export function SkillDetailDialog({
 
   const contentError = contentQuery.error;
   const contentBlocked =
-    contentError instanceof SkillRequestError &&
-    contentError.isAdminRequired;
+    contentError instanceof SkillRequestError && contentError.isAdminRequired;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

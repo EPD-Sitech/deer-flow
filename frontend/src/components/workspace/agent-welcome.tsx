@@ -25,11 +25,14 @@ export function AgentWelcome({
   const avatarScope = scope ?? "user";
   useEffect(() => {
     const handleUpdate = (event: Event) => {
-      const detail = (event as CustomEvent<{ name?: string; scope?: string }>).detail;
-      if (detail?.name === agentName && detail.scope === avatarScope) setAvatarVersion((value) => value + 1);
+      const detail = (event as CustomEvent<{ name?: string; scope?: string }>)
+        .detail;
+      if (detail?.name === agentName && detail.scope === avatarScope)
+        setAvatarVersion((value) => value + 1);
     };
     window.addEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
-    return () => window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
+    return () =>
+      window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
   }, [agentName, avatarScope]);
   const displayName = agent?.display_name ?? agent?.name ?? agentName;
   const description = agent?.description;
@@ -51,9 +54,7 @@ export function AgentWelcome({
             className="size-full object-cover"
           />
         </div>
-        <div className="min-w-0 truncate text-2xl font-bold">
-          {displayName}
-        </div>
+        <div className="min-w-0 truncate text-2xl font-bold">{displayName}</div>
       </div>
       {description && (
         <p className="text-muted-foreground max-w-sm text-sm">{description}</p>

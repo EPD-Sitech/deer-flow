@@ -123,6 +123,13 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function formatPreviewBytes(bytes?: number) {
+  if (bytes === undefined) return undefined;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 function formatDate(value?: string) {
   if (!value) return "—";
   const date = new Date(value);
@@ -165,7 +172,16 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(isCodeFile);
   const [loadError, setLoadError] = useState(false);
+  const [previewBytes, setPreviewBytes] = useState<number>();
+  const [totalBytes, setTotalBytes] = useState<number>();
+  const [truncated, setTruncated] = useState(false);
+  const [fullContentKey, setFullContentKey] = useState<string>();
   const [htmlPreviewURL, setHtmlPreviewURL] = useState<string>();
+  const contentKey = `${item.thread_id}\u0000${item.path}`;
+  const fullContentRequested = fullContentKey === contentKey;
+  const isLoadingFullContent = fullContentRequested && isLoading;
+  const effectiveViewMode =
+    truncated && language === "html" ? "code" : viewMode;
 
   useEffect(() => {
     setViewMode(supportsTextPreview ? "preview" : "code");
@@ -176,17 +192,30 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
       setContent("");
       setIsLoading(false);
       setLoadError(false);
+      setPreviewBytes(undefined);
+      setTotalBytes(undefined);
+      setTruncated(false);
       return;
     }
     let cancelled = false;
     setIsLoading(true);
     setLoadError(false);
+    setContent("");
+    setPreviewBytes(undefined);
+    setTotalBytes(undefined);
+    setTruncated(false);
     void loadArtifactContent({
       filepath: item.path,
       threadId: item.thread_id,
+      full: fullContentRequested,
     })
       .then((result) => {
-        if (!cancelled) setContent(result.content);
+        if (!cancelled) {
+          setContent(result.content);
+          setPreviewBytes(result.previewBytes);
+          setTotalBytes(result.totalBytes);
+          setTruncated(result.truncated);
+        }
       })
       .catch(() => {
         if (!cancelled) setLoadError(true);
@@ -197,7 +226,13 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [isCodeFile, item.path, item.status, item.thread_id]);
+  }, [
+    fullContentRequested,
+    isCodeFile,
+    item.path,
+    item.status,
+    item.thread_id,
+  ]);
 
   useEffect(() => {
     if (language !== "html" || !content) {
@@ -228,7 +263,7 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
             </p>
           </div>
         </div>
-        {supportsTextPreview && !isLoading && !loadError && (
+        {supportsTextPreview && !truncated && !isLoading && !loadError && (
           <ToggleGroup
             type="single"
             variant="outline"
@@ -278,6 +313,29 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
           </Button>
         </div>
       </div>
+      {truncated && (
+        <div className="border-border bg-muted/40 flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 text-sm">
+          <span className="text-muted-foreground">
+            {totalBytes !== undefined
+              ? `当前显示 ${formatPreviewBytes(totalBytes)} 中的前 ${formatPreviewBytes(previewBytes) ?? "1 MiB"}。`
+              : `当前显示前 ${formatPreviewBytes(previewBytes) ?? "1 MiB"}。`}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setFullContentKey(contentKey)}
+            disabled={isLoadingFullContent}
+          >
+            加载完整文件
+          </Button>
+        </div>
+      )}
+      {isLoadingFullContent && (
+        <div className="border-border text-muted-foreground flex shrink-0 items-center gap-2 border-b px-4 py-2 text-sm">
+          <LoaderIcon className="size-4 animate-spin" />
+          正在加载完整文件...
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         {item.status === "missing" ? (
           <PreviewFallback item={item} message="文件已失效或不存在" />
@@ -288,13 +346,17 @@ function Preview({ item, onClose }: { item: Material; onClose: () => void }) {
             <LoaderIcon className="size-4 animate-spin" />
             正在加载预览…
           </div>
-        ) : isCodeFile && language === "markdown" && viewMode === "preview" ? (
+        ) : isCodeFile &&
+          language === "markdown" &&
+          effectiveViewMode === "preview" ? (
           <div className="size-full overflow-auto px-4 py-3">
             <SafeStreamdown className="min-w-0" {...artifactMarkdownPlugins}>
               {content}
             </SafeStreamdown>
           </div>
-        ) : isCodeFile && language === "html" && viewMode === "preview" ? (
+        ) : isCodeFile &&
+          language === "html" &&
+          effectiveViewMode === "preview" ? (
           <iframe
             title={item.name}
             className="size-full"

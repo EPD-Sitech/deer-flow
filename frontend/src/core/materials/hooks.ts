@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import {
   fetchMaterialCapabilities,
@@ -6,14 +7,28 @@ import {
   setMaterialFavorite,
   uploadMaterialToKnowledge,
 } from "./api";
+
+export const MATERIALS_SEARCH_DEBOUNCE_MS = 300;
+
 export function useMaterials(filters: {
   q: string;
   type: string;
   favoritesOnly: boolean;
 }) {
+  const [debouncedQuery, setDebouncedQuery] = useState(filters.q);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedQuery(filters.q),
+      MATERIALS_SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [filters.q]);
+
+  const queryFilters = { ...filters, q: debouncedQuery };
   return useQuery({
-    queryKey: ["materials", filters],
-    queryFn: () => fetchMaterials(filters),
+    queryKey: ["materials", queryFilters],
+    queryFn: () => fetchMaterials(queryFilters),
     staleTime: 15_000,
   });
 }

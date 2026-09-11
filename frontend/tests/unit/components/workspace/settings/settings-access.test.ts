@@ -6,10 +6,11 @@ import {
 } from "@/components/workspace/settings/settings-access";
 
 describe("settings access", () => {
-  it("limits regular users to account and appearance", () => {
+  it("limits regular users to account, appearance, and channels", () => {
     expect(getVisibleSettingsSections(false)).toEqual([
       "account",
       "appearance",
+      "channels",
     ]);
     expect(resolveVisibleSettingsSection("tools", false)).toBe("appearance");
     expect(resolveVisibleSettingsSection("account", false)).toBe("account");

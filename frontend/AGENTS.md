@@ -67,6 +67,18 @@ The frontend is a stateful chat application. Users create **threads** (conversat
 - **`typings/`** — Ambient TypeScript declarations
 - Root files: `env.js` (env validation), `mdx-components.ts` (MDX component map)
 
+The browser-side digital human is intentionally isolated under
+`components/workspace/avatar/` and `core/avatar/`: VRMA motions must use
+`createVRMAnimationClip` so the normalized humanoid rig retargets poses to each
+model's raw bones. The speaker keeps the latest answer snapshot after a manual
+stop and exposes replay without allowing later streaming chunks to restart
+speech automatically. `core/avatar/motion-choreography.ts` owns the interaction
+order: idle cycles through peace sign, greeting, and the built-in `fullbody`
+VRMA motion;
+clicking the canvas cycles pose, peace sign, and spin; active speech always uses
+the pose motion. The scene treats a click as a left-pointer interaction within
+an 8px movement tolerance so model pan and right-drag rotation remain intact.
+
 The local Agent gallery uses `AgentSettingsDialog` for every editable Agent, including administrator-managed public Agents. `LocalAgentCard` must pass the catalog `scope` through the dialog; versions, validation, testing, activity, and structured setting writes all use that scope so a public Agent never falls back to user-owned storage. Skill and MCP selections are explicit arrays (`[]` means none), and a successful settings write must invalidate the catalog query before the dialog closes so reopening reflects persisted allowlists.
 
 ### Data Flow

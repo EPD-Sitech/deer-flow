@@ -10,6 +10,8 @@ export type SpeechState =
   | "paused"
   /** Autoplay was blocked and a user gesture is required. */
   | "blocked"
+  /** Playback was stopped by the user and can be replayed. */
+  | "stopped"
   | "error";
 
 export interface SpeechSettings {

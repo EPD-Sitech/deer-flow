@@ -1,5 +1,6 @@
 import { type VRM, VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import {
+  createVRMAnimationClip,
   type VRMAnimation,
   VRMAnimationLoaderPlugin,
 } from "@pixiv/three-vrm-animation";
@@ -22,6 +23,7 @@ const MOUTH_SMOOTHING = 18;
 const BLINK_MIN_INTERVAL_MS = 2600;
 const BLINK_MAX_INTERVAL_MS = 6200;
 const BLINK_DURATION_MS = 130;
+const MOTION_CROSSFADE_SECONDS = 0.35;
 
 /**
  * Arms-down relaxation steps. Many VRM tools (notably VRoid) export a default
@@ -67,6 +69,7 @@ const ZOOM_WHEEL_SENSITIVITY = 0.0012;
 const DRAG_ROTATION_SENSITIVITY = 0.01;
 /** World-metres the model moves per pixel, at zoom = 1. */
 const DRAG_PAN_SENSITIVITY = 0.006;
+const CLICK_MOVE_TOLERANCE = 8;
 
 interface GestureBone {
   node: THREE.Object3D;
@@ -139,12 +142,14 @@ export class VrmScene {
   private currentAnimationUrl: string | null = null;
   private loadAnimationSeq = 0;
   private animationLoadFailed = false;
+  private animationStopTimer: number | null = null;
   /**
    * Local rotation of every humanoid raw bone captured right after load (i.e.
    * the relaxed arms-down rest pose). Storing it lets stopping an animation
    * restore the idle baseline before gestures/sway resume.
    */
-  private restPoseBones: Array<{ node: THREE.Object3D; euler: THREE.Euler }> = [];
+  private restPoseBones: Array<{ node: THREE.Object3D; euler: THREE.Euler }> =
+    [];
 
   private zoom = 1;
   private camCenterY = 0;
@@ -158,6 +163,7 @@ export class VrmScene {
   private dragStartRotationY = 0;
   private dragStartOffsetX = 0;
   private dragStartOffsetY = 0;
+  private activationHandler: (() => void) | null = null;
 
   private nextBlinkAt = 0;
   private blinkEndsAt = 0;
@@ -245,7 +251,8 @@ export class VrmScene {
 
   /** Left-drag pans the model; right-drag rotates it about its vertical axis. */
   private readonly handlePointerDown = (event: PointerEvent): void => {
-    const mode = event.button === 2 ? "rotate" : event.button === 0 ? "pan" : null;
+    const mode =
+      event.button === 2 ? "rotate" : event.button === 0 ? "pan" : null;
     if (!mode) {
       return;
     }
@@ -279,11 +286,20 @@ export class VrmScene {
     if (!this.dragMode) {
       return;
     }
+    const wasClick =
+      this.dragMode === "pan" &&
+      Math.hypot(
+        event.clientX - this.dragStartX,
+        event.clientY - this.dragStartY,
+      ) <= CLICK_MOVE_TOLERANCE;
     this.dragMode = null;
     try {
       this.container?.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer capture may already be gone; nothing to release.
+    }
+    if (wasClick) {
+      this.activationHandler?.();
     }
   };
 
@@ -410,14 +426,12 @@ export class VrmScene {
   }
 
   /**
-   * Bind the just-loaded motion to the model and start it. Only humanoid bone
-   * tracks are used so the existing blink/mouth expression pipeline is not
-   * clobbered by the animation (these motion packs carry no facial tracks).
-   *
-   * The VRMA motion is applied straight onto the RAW humanoid bones (the model
-   * is driven without `autoUpdateHumanBones` so gestures may touch the same
-   * bones), so the keyframe tracks are re-targeted from the throw-away
-   * `Normalized_*` rig nodes to their raw counterparts.
+   * Bind the just-loaded motion to the model and start it. The helper from
+   * three-vrm creates tracks for the model's normalized humanoid rig, then
+   * `VRMHumanoid.update()` transfers that pose to the model-specific raw rig.
+   * This retargeting step is important for hand and finger bones: applying a
+   * source VRMA quaternion directly to raw bones makes thumb joints depend on
+   * the target model's local axes and can fold the thumb through the palm.
    */
   private playAnimationClip(animation: VRMAnimation, url: string): void {
     const vrm = this.vrm;
@@ -425,57 +439,27 @@ export class VrmScene {
     if (!vrm || !humanoid) {
       return;
     }
-    const metaVersion = vrm.meta.metaVersion;
-    const tracks: THREE.KeyframeTrack[] = [];
-
-    for (const [name, track] of animation.humanoidTracks.translation) {
-      const raw = humanoid.getRawBoneNode(name);
-      if (!raw) {
-        continue;
-      }
-      const animationHipsY = animation.restHipsPosition.y;
-      const humanoidHipsY = humanoid.normalizedRestPose.hips?.position?.[1];
-      const scale =
-        animationHipsY > 0 && humanoidHipsY ? humanoidHipsY / animationHipsY : 1;
-      const values = track.values.map((value, index) =>
-        (metaVersion === "0" && index % 3 !== 1 ? -value : value) * scale,
-      );
-      tracks.push(
-        new THREE.VectorKeyframeTrack(
-          `${raw.name}.position`,
-          track.times,
-          values,
-        ),
-      );
-    }
-
-    for (const [name, track] of animation.humanoidTracks.rotation) {
-      const raw = humanoid.getRawBoneNode(name);
-      if (!raw) {
-        continue;
-      }
-      const values = track.values.map((value, index) =>
-        metaVersion === "0" && index % 2 === 0 ? -value : value,
-      );
-      tracks.push(
-        new THREE.QuaternionKeyframeTrack(
-          `${raw.name}.quaternion`,
-          track.times,
-          values,
-        ),
-      );
-    }
-
-    if (tracks.length === 0) {
-      throw new Error("motion has no bindable bone tracks");
-    }
-
-    const clip = new THREE.AnimationClip("avatarMotion", animation.duration, tracks);
-    this.stopAnimationObjects();
-    const mixer = new THREE.AnimationMixer(vrm.scene);
+    const clip = createVRMAnimationClip(animation, vrm);
+    this.cancelAnimationStop();
+    // Authored motions target the normalized rig. Raw-bone procedural gestures
+    // are only used when no authored motion is active.
+    humanoid.resetNormalizedPose();
+    humanoid.autoUpdateHumanBones = true;
+    const mixer = this.animationMixer ?? new THREE.AnimationMixer(vrm.scene);
+    const previousAction = this.animationAction;
     const action = mixer.clipAction(clip);
     action.reset();
     action.play();
+    if (previousAction) {
+      previousAction.crossFadeTo(action, MOTION_CROSSFADE_SECONDS, false);
+      window.setTimeout(() => {
+        if (this.animationAction !== previousAction) {
+          previousAction.stop();
+        }
+      }, MOTION_CROSSFADE_SECONDS * 1000);
+    } else {
+      action.fadeIn(MOTION_CROSSFADE_SECONDS);
+    }
     this.animationMixer = mixer;
     this.animationAction = action;
     this.animationPlaying = true;
@@ -483,14 +467,45 @@ export class VrmScene {
   }
 
   private stopAnimation(): void {
-    if (this.animationPlaying) {
-      this.restorePose();
+    // A motion can be deselected while its VRMA file is still loading. Bump
+    // the sequence so that late loader completion cannot resurrect the motion.
+    this.loadAnimationSeq += 1;
+    const action = this.animationAction;
+    if (action && this.animationMixer) {
+      this.cancelAnimationStop();
+      action.fadeOut(MOTION_CROSSFADE_SECONDS);
+      const seq = this.loadAnimationSeq;
+      this.currentAnimationUrl = null;
+      this.animationStopTimer = window.setTimeout(() => {
+        if (seq === this.loadAnimationSeq) {
+          this.finishAnimationStop();
+        }
+      }, MOTION_CROSSFADE_SECONDS * 1000);
+      return;
     }
+    this.finishAnimationStop();
+  }
+
+  private finishAnimationStop(): void {
+    this.cancelAnimationStop();
+    this.restorePose();
     this.stopAnimationObjects();
+    if (this.vrm?.humanoid) {
+      this.vrm.humanoid.autoUpdateHumanBones = false;
+      this.vrm.humanoid.resetNormalizedPose();
+    }
     this.currentAnimationUrl = null;
   }
 
+  private cancelAnimationStop(): void {
+    if (this.animationStopTimer !== null) {
+      window.clearTimeout(this.animationStopTimer);
+      this.animationStopTimer = null;
+    }
+  }
+
   private stopAnimationObjects(): void {
+    this.cancelAnimationStop();
     this.animationAction?.stop();
     this.animationAction = null;
     this.animationMixer?.stopAllAction();
@@ -523,6 +538,10 @@ export class VrmScene {
     this.mouthProvider = provider;
   }
 
+  setActivationHandler(handler: (() => void) | null): void {
+    this.activationHandler = handler;
+  }
+
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
@@ -534,6 +553,7 @@ export class VrmScene {
     this.container?.removeEventListener("pointerup", this.handlePointerUp);
     this.container?.removeEventListener("pointercancel", this.handlePointerUp);
     this.container?.removeEventListener("contextmenu", this.handleContextMenu);
+    this.activationHandler = null;
     this.disposeModel();
     const renderer = this.renderer;
     this.renderer = null;
@@ -678,15 +698,50 @@ export class VrmScene {
       breath?: number;
     }> = [
       // Arms lead the pose and liven up while speaking.
-      { bone: "leftUpperArm", axes: [[1, 0.45], [2, 0.28]], speaking: true },
-      { bone: "rightUpperArm", axes: [[1, 0.45], [2, 0.28]], speaking: true },
+      {
+        bone: "leftUpperArm",
+        axes: [
+          [1, 0.45],
+          [2, 0.28],
+        ],
+        speaking: true,
+      },
+      {
+        bone: "rightUpperArm",
+        axes: [
+          [1, 0.45],
+          [2, 0.28],
+        ],
+        speaking: true,
+      },
       { bone: "leftLowerArm", axes: [[1, 0.35]] },
       { bone: "rightLowerArm", axes: [[1, 0.35]] },
       // Torso sways and breathes (chest rises and falls on the X axis).
-      { bone: "spine", axes: [[0, 0.03], [1, 0.025]], breath: BREATH_SPINE_AMP },
-      { bone: "chest", axes: [[0, 0.03], [1, 0.02]], breath: BREATH_CHEST_AMP },
+      {
+        bone: "spine",
+        axes: [
+          [0, 0.03],
+          [1, 0.025],
+        ],
+        breath: BREATH_SPINE_AMP,
+      },
+      {
+        bone: "chest",
+        axes: [
+          [0, 0.03],
+          [1, 0.02],
+        ],
+        breath: BREATH_CHEST_AMP,
+      },
       // Head nods and turns a little, more while speaking.
-      { bone: "head", axes: [[0, 0.04], [1, 0.035]], speaking: true },
+      {
+        bone: "head",
+        axes: [
+          [0, 0.04],
+          [1, 0.035],
+        ],
+        speaking: true,
+      },
     ];
 
     const gestures: GestureBone[] = [];
@@ -722,7 +777,8 @@ export class VrmScene {
       // sines stay in [-1, 1], so the weighted sum is bounded around ±1.
       const wander =
         Math.sin(t * gesture.freq1 + gesture.phase1) * GESTURE_SLOW_WEIGHT +
-        Math.sin(t * gesture.freq2 + gesture.phase2) * (1 - GESTURE_SLOW_WEIGHT);
+        Math.sin(t * gesture.freq2 + gesture.phase2) *
+          (1 - GESTURE_SLOW_WEIGHT);
       const value = wander * boost;
 
       const base = gesture.base;

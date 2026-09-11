@@ -17,6 +17,7 @@ interface AvatarCanvasProps {
   animationUrl: string | null;
   mouthProvider: () => number;
   onStatus: (status: AvatarModelStatus, mouthSupported: boolean) => void;
+  onActivate?: () => void;
   className?: string;
 }
 
@@ -33,15 +34,26 @@ export function AvatarCanvas({
   animationUrl,
   mouthProvider,
   onStatus,
+  onActivate,
   className,
 }: AvatarCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<VrmScene | null>(null);
   const [mounted, setMounted] = useState(false);
-  const latest = useRef({ mouthProvider, onStatus, animationUrl });
+  const latest = useRef({
+    mouthProvider,
+    onStatus,
+    animationUrl,
+    onActivate,
+  });
 
   useEffect(() => {
-    latest.current = { mouthProvider, onStatus, animationUrl };
+    latest.current = {
+      mouthProvider,
+      onStatus,
+      animationUrl,
+      onActivate,
+    };
   });
 
   useEffect(() => {
@@ -61,6 +73,7 @@ export function AvatarCanvas({
       scene = new VrmScene();
       sceneRef.current = scene;
       scene.setMouthProvider(() => latest.current.mouthProvider());
+      scene.setActivationHandler(() => latest.current.onActivate?.());
       scene.mount(container);
       setMounted(true);
     })();
@@ -126,7 +139,9 @@ export function AvatarCanvas({
     if (!scene) {
       return;
     }
-    void scene.setAnimation(animationUrl && animationUrl.length > 0 ? animationUrl : null);
+    void scene.setAnimation(
+      animationUrl && animationUrl.length > 0 ? animationUrl : null,
+    );
   }, [mounted, animationUrl, modelVersion]);
 
   return (

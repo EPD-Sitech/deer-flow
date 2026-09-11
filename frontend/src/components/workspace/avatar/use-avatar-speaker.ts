@@ -32,6 +32,8 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
   const optionsRef = useRef({ voice, rate, muted });
   const [state, setState] = useState<SpeechState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const replayTextRef = useRef<string | null>(null);
+  const stoppedKeyRef = useRef<string | null>(null);
 
   // Kept in sync before the trigger effect below runs so the speak call always
   // reads the current voice/rate/mute choice.
@@ -41,7 +43,15 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
 
   const getQueue = useCallback(() => {
     queueRef.current ??= new SpeechQueue({
-      onStateChange: setState,
+      onStateChange: (nextState) => {
+        // A stopped stream may still settle an in-flight fetch/play promise
+        // after stop() returned. Keep that cleanup from replacing the replay
+        // state with idle (or blocked).
+        if (stoppedKeyRef.current !== null) {
+          return;
+        }
+        setState(nextState);
+      },
       onError: setError,
     });
     return queueRef.current;
@@ -76,12 +86,25 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
       // A new answer began: drop anything queued from the previous turn, and
       // clear any stale failure so one transient error does not stick forever.
       streamingKeyRef.current = key;
+      stoppedKeyRef.current = null;
+      replayTextRef.current = null;
       spokenLenRef.current = 0;
       setError(null);
       if (isMuted) {
         return;
       }
       queue.stop();
+    }
+
+    // A manual stop owns the rest of this answer. The thread may continue
+    // streaming after the user stops playback, but those later chunks must not
+    // silently restart the speaker.
+    if (stoppedKeyRef.current === key) {
+      // Keep the replay snapshot current while the answer finishes streaming.
+      // The replay action should read the complete answer available at click
+      // time, not only the fragment that had been generated at stop time.
+      replayTextRef.current = full;
+      return;
     }
 
     if (isMuted) {
@@ -120,8 +143,29 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
   }, [getQueue]);
 
   const stop = useCallback(() => {
+    if (lastAi) {
+      replayTextRef.current = extractContentFromMessage(lastAi.message).trim();
+      stoppedKeyRef.current = lastAi.key;
+    }
     getQueue().stop();
-  }, [getQueue]);
+    if (replayTextRef.current) {
+      setState("stopped");
+    }
+  }, [getQueue, lastAi]);
+
+  const replay = useCallback(() => {
+    const text = replayTextRef.current;
+    if (!text || muted) {
+      return;
+    }
+    stoppedKeyRef.current = null;
+    spokenLenRef.current = text.length;
+    const { voice: currentVoice, rate: currentRate } = optionsRef.current;
+    void getQueue().speak(text, {
+      voice: currentVoice,
+      rate: currentRate,
+    });
+  }, [getQueue, muted]);
 
   const unlock = useCallback(() => {
     void getQueue().unlock();
@@ -132,7 +176,7 @@ export function useAvatarSpeaker({ voice, rate, muted }: SpeakerOptions) {
     [],
   );
 
-  return { state, error, pause, resume, stop, unlock, getMouthOpen };
+  return { state, error, pause, resume, stop, replay, unlock, getMouthOpen };
 }
 
 /**

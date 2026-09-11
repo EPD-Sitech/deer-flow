@@ -680,6 +680,7 @@ export const enUS: Translations = {
     pause: "Pause",
     resume: "Resume",
     stop: "Stop",
+    replay: "Replay",
     paused: "Paused",
     speaking: "Speaking…",
     enableAudio: "Click to enable audio",

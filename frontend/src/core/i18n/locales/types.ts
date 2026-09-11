@@ -564,6 +564,7 @@ export interface Translations {
     pause: string;
     resume: string;
     stop: string;
+    replay: string;
     paused: string;
     speaking: string;
     enableAudio: string;

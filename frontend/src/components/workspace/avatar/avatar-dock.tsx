@@ -1,15 +1,12 @@
 "use client";
 
 import {
-  CheckIcon,
   ChevronDownIcon,
-  DramaIcon,
   PauseIcon,
   PlayIcon,
-  RotateCcwIcon,
+  RotateCwIcon,
   SparklesIcon,
   SquareIcon,
-  UploadIcon,
   VolumeIcon,
 } from "lucide-react";
 import {
@@ -21,29 +18,18 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/workspace/tooltip";
+import { DOCK_SIZE } from "@/core/avatar/constants";
 import {
-  ANIMATION_NONE,
-  AVATAR_ANIMATIONS,
-  type AvatarAnimationKey,
-  DOCK_SIZE,
-  MAX_MODEL_BYTES,
-} from "@/core/avatar/constants";
-import {
-  clearModel,
-  getStoredModel,
-  isGlbContainer,
-  putModel,
-} from "@/core/avatar/vrm-storage";
+  AVATAR_CLICK_MOTIONS,
+  AVATAR_IDLE_MOTIONS,
+  AVATAR_SPEAKING_MOTION,
+  animationUrlForMotion,
+  nextMotionIndex,
+} from "@/core/avatar/motion-choreography";
+import { getStoredModel } from "@/core/avatar/vrm-storage";
 import { useI18n } from "@/core/i18n/hooks";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
 
 import { AvatarCanvas, type AvatarModelStatus } from "./avatar-canvas";
 import { useDockState } from "./dock-storage";
@@ -59,27 +45,41 @@ export default function AvatarDock() {
   const [modelVersion, setModelVersion] = useState(0);
   const [status, setStatus] = useState<AvatarModelStatus>("loading");
   const [mouthSupported, setMouthSupported] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [idleIndex, setIdleIndex] = useState(0);
+  const [clickIndex, setClickIndex] = useState<number | null>(null);
+  const wasSpeaking = useRef(false);
 
-  const [animationKey, setAnimationKey] = useState<AvatarAnimationKey | typeof ANIMATION_NONE>("modelPose");
-  const animationUrl =
-    AVATAR_ANIMATIONS.find((animation) => animation.key === animationKey)?.url ??
-    null;
+  const { state, error, pause, resume, stop, replay, unlock, getMouthOpen } =
+    useAvatarSpeaker({
+      voice: dock.voice,
+      rate: dock.rate,
+      muted: dock.muted,
+    });
 
-  const {
-    state,
-    error,
-    pause,
-    resume,
-    stop,
-    unlock,
-    getMouthOpen,
-  } = useAvatarSpeaker({
-    voice: dock.voice,
-    rate: dock.rate,
-    muted: dock.muted,
-  });
+  const isSpeaking = state === "speaking" || state === "loading";
+
+  useEffect(() => {
+    if (isSpeaking) {
+      wasSpeaking.current = true;
+      setClickIndex(null);
+      return;
+    }
+    if (wasSpeaking.current) {
+      wasSpeaking.current = false;
+      setIdleIndex(0);
+      setClickIndex(null);
+    }
+  }, [isSpeaking]);
+
+  useEffect(() => {
+    if (isSpeaking || clickIndex !== null) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setIdleIndex((index) => nextMotionIndex(index, AVATAR_IDLE_MOTIONS));
+    }, 7000);
+    return () => window.clearInterval(timer);
+  }, [clickIndex, isSpeaking]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,56 +95,13 @@ export default function AvatarDock() {
     };
   }, []);
 
-  const handleModelUpload = useCallback(
-    async (file: File) => {
-      if (file.size > MAX_MODEL_BYTES) {
-        setNotice(t.avatar.tooLarge);
-        return;
-      }
-      if (!(await isGlbContainer(file))) {
-        setNotice(t.avatar.invalidModel);
-        return;
-      }
-      try {
-        await putModel(file);
-      } catch {
-        // Storage may be unavailable; the model still works for this session.
-      }
-      setModel(file);
-      setModelVersion((version) => version + 1);
-      setNotice(null);
-    },
-    [t],
-  );
-
-  const handleResetModel = useCallback(async () => {
-    try {
-      await clearModel();
-    } catch {
-      // Storage may be unavailable; dropping the in-memory model still works.
-    }
-    setModel(null);
-    setModelVersion((version) => version + 1);
-    setNotice(null);
-  }, []);
-
   const startDrag = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (event.button !== 0) {
         return;
       }
-      // Buttons (upload, motion menu, collapse, …) live in the draggable
-      // header. Capturing the pointer on their press retargets the derived
-      // click away from the button (and out of a Radix portal menu), so don't
-      // start a drag when the press lands on an interactive element.
-      //
-      // The motion menu content is rendered in a Radix portal: it is *not* a
-      // DOM child of the header, but React still routes portal events up the
-      // React tree to this handler. Capturing here would steal the pointerup /
-      // click away from the menu item, so a menu selection would never fire.
-      // Requiring the press to be inside the header's own DOM subtree (via
-      // `contains`) excludes those portaled menu items; `closest("button")`
-      // additionally covers the header's own interactive buttons.
+      // Keep header buttons clickable instead of starting a drag on their
+      // pointerdown event.
       const handle = event.currentTarget;
       const target = event.target as HTMLElement | null;
       if (!target || !handle.contains(target) || target.closest("button")) {
@@ -207,11 +164,16 @@ export default function AvatarDock() {
     );
   }
 
-  const isSpeaking = state === "speaking" || state === "loading";
+  const motionKey = isSpeaking
+    ? AVATAR_SPEAKING_MOTION
+    : clickIndex === null
+      ? (AVATAR_IDLE_MOTIONS[idleIndex] ?? AVATAR_IDLE_MOTIONS[0])
+      : (AVATAR_CLICK_MOTIONS[clickIndex] ?? AVATAR_CLICK_MOTIONS[0]);
+  const animationUrl = animationUrlForMotion(motionKey);
 
   return (
     <div
-      className="fixed z-40 flex flex-col overflow-hidden rounded-xl"
+      className="fixed z-40 flex flex-col overflow-visible"
       style={{
         right: dock.right,
         bottom: dock.bottom,
@@ -220,139 +182,115 @@ export default function AvatarDock() {
       }}
     >
       <div
-        className="flex shrink-0 cursor-grab items-center gap-0.5 px-1.5 py-1 active:cursor-grabbing"
+        className="relative flex shrink-0 cursor-grab items-center gap-0.5 px-1.5 py-1 active:cursor-grabbing"
         onPointerDown={startDrag}
       >
-        <span className="text-muted-foreground grow pl-1 text-xs font-medium">
-          {t.avatar.title}
-        </span>
-        <Tooltip content={t.avatar.upload}>
-          <Button
-            aria-label={t.avatar.upload}
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <UploadIcon />
-          </Button>
-        </Tooltip>
-        {model ? (
-          <Tooltip content={t.avatar.resetModel}>
-            <Button
-              aria-label={t.avatar.resetModel}
-              size="icon-sm"
-              variant="ghost"
-              onClick={handleResetModel}
-            >
-              <RotateCcwIcon />
-            </Button>
-          </Tooltip>
-        ) : null}
         {isSpeaking ? (
-          <Tooltip content={t.avatar.pause}>
-            <Button
-              aria-label={t.avatar.pause}
-              size="icon-sm"
-              variant="ghost"
-              onClick={pause}
-            >
-              <PauseIcon />
-            </Button>
-          </Tooltip>
+          <p
+            className="text-muted-foreground pointer-events-none absolute inset-x-12 text-center text-[11px]"
+            role="status"
+          >
+            {t.avatar.speaking}
+          </p>
         ) : state === "paused" ? (
-          <Tooltip content={t.avatar.resume}>
-            <Button
-              aria-label={t.avatar.resume}
-              size="icon-sm"
-              variant="ghost"
-              onClick={resume}
-            >
-              <PlayIcon />
-            </Button>
-          </Tooltip>
+          <p
+            className="text-muted-foreground pointer-events-none absolute inset-x-12 text-center text-[11px]"
+            role="status"
+          >
+            {t.avatar.paused}
+          </p>
         ) : null}
-        {isSpeaking || state === "paused" ? (
-          <Tooltip content={t.avatar.stop}>
-            <Button
-              aria-label={t.avatar.stop}
-              size="icon-sm"
-              variant="ghost"
-              onClick={stop}
-            >
-              <SquareIcon />
-            </Button>
-          </Tooltip>
-        ) : null}
-        <DropdownMenu>
-          <Tooltip content={t.avatar.animationLabel}>
-            <DropdownMenuTrigger asChild>
+        <div className="ml-auto flex items-center gap-0.5">
+          {isSpeaking ? (
+            <Tooltip content={t.avatar.pause}>
               <Button
-                aria-label={t.avatar.animationLabel}
+                aria-label={t.avatar.pause}
                 size="icon-sm"
                 variant="ghost"
-                onPointerDown={(event) => event.stopPropagation()}
+                onClick={pause}
               >
-                <DramaIcon />
+                <PauseIcon />
               </Button>
-            </DropdownMenuTrigger>
-          </Tooltip>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => setAnimationKey(ANIMATION_NONE)}
-            >
-              <CheckIcon
-                className={cn(
-                  "size-3.5",
-                  animationKey === ANIMATION_NONE
-                    ? "opacity-100"
-                    : "opacity-0",
-                )}
-              />
-              {t.avatar.animationNone}
-            </DropdownMenuItem>
-            {AVATAR_ANIMATIONS.map((animation) => (
-              <DropdownMenuItem
-                key={animation.key}
-                onClick={() => setAnimationKey(animation.key)}
+            </Tooltip>
+          ) : state === "paused" ? (
+            <Tooltip content={t.avatar.resume}>
+              <Button
+                aria-label={t.avatar.resume}
+                size="icon-sm"
+                variant="ghost"
+                onClick={resume}
               >
-                <CheckIcon
-                  className={cn(
-                    "size-3.5",
-                    animationKey === animation.key
-                      ? "opacity-100"
-                      : "opacity-0",
-                  )}
-                />
-                {t.avatar.animationNames[animation.key]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Tooltip content={t.avatar.collapse}>
-          <Button
-            aria-label={t.avatar.collapse}
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => updateDock({ collapsed: true })}
-          >
-            <ChevronDownIcon />
-          </Button>
-        </Tooltip>
+                <PlayIcon />
+              </Button>
+            </Tooltip>
+          ) : null}
+          {isSpeaking || state === "paused" ? (
+            <Tooltip content={t.avatar.stop}>
+              <Button
+                aria-label={t.avatar.stop}
+                size="icon-sm"
+                variant="ghost"
+                onClick={stop}
+              >
+                <SquareIcon />
+              </Button>
+            </Tooltip>
+          ) : state === "stopped" ? (
+            <Tooltip content={t.avatar.replay}>
+              <Button
+                aria-label={t.avatar.replay}
+                className="rounded-full"
+                size="icon-sm"
+                variant="ghost"
+                onClick={replay}
+              >
+                <RotateCwIcon />
+              </Button>
+            </Tooltip>
+          ) : null}
+          <Tooltip content={t.avatar.collapse}>
+            <Button
+              aria-label={t.avatar.collapse}
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => updateDock({ collapsed: true })}
+            >
+              <ChevronDownIcon />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
-      <div className="relative min-h-0 grow">
+      <div
+        className="relative min-h-0 grow"
+        style={{
+          WebkitMaskImage:
+            "radial-gradient(ellipse 72% 80% at center, #000 28%, rgb(0 0 0 / 0.9) 48%, rgb(0 0 0 / 0.45) 72%, transparent 100%)",
+          maskImage:
+            "radial-gradient(ellipse 72% 80% at center, #000 28%, rgb(0 0 0 / 0.9) 48%, rgb(0 0 0 / 0.45) 72%, transparent 100%)",
+        }}
+      >
         <AvatarCanvas
           model={model}
           modelVersion={modelVersion}
           animationUrl={animationUrl}
           mouthProvider={getMouthOpen}
+          onActivate={() => {
+            if (!isSpeaking) {
+              setClickIndex((index) =>
+                index === null
+                  ? 0
+                  : nextMotionIndex(index, AVATAR_CLICK_MOTIONS),
+              );
+            }
+          }}
           onStatus={(nextStatus, nextMouthSupported) => {
             setStatus(nextStatus);
             setMouthSupported(nextMouthSupported);
           }}
         />
         {status !== "ready" ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
             <p className="text-muted-foreground text-xs">
               {status === "missing"
                 ? t.avatar.modelMissing
@@ -360,15 +298,6 @@ export default function AvatarDock() {
                   ? t.avatar.loading
                   : t.avatar.loadFailed}
             </p>
-            <Button
-              className="h-7 text-xs"
-              size="sm"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <UploadIcon />
-              {t.avatar.upload}
-            </Button>
           </div>
         ) : null}
       </div>
@@ -390,36 +319,10 @@ export default function AvatarDock() {
             {t.avatar.mouthUnsupported}
           </p>
         ) : null}
-        {notice ? (
-          <p className="text-destructive text-[11px]">{notice}</p>
-        ) : null}
         {error ? (
           <p className="text-destructive text-[11px]">{t.avatar.ttsFailed}</p>
         ) : null}
-        {isSpeaking ? (
-          <p className={cn("text-muted-foreground text-[11px]")} role="status">
-            {t.avatar.speaking}
-          </p>
-        ) : state === "paused" ? (
-          <p className={cn("text-muted-foreground text-[11px]")} role="status">
-            {t.avatar.paused}
-          </p>
-        ) : null}
       </div>
-
-      <input
-        accept=".vrm"
-        className="hidden"
-        ref={fileInputRef}
-        type="file"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (file) {
-            void handleModelUpload(file);
-          }
-        }}
-      />
     </div>
   );
 }

@@ -651,6 +651,7 @@ export const zhCN: Translations = {
     pause: "暂停朗读",
     resume: "继续朗读",
     stop: "停止朗读",
+    replay: "重新朗读",
     paused: "已暂停",
     speaking: "朗读中…",
     enableAudio: "点击开启语音",

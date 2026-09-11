@@ -5,6 +5,7 @@ import {
   VRMAnimationLoaderPlugin,
 } from "@pixiv/three-vrm-animation";
 import * as THREE from "three";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 import { MOUTH_KEYS, MOUTH_WEIGHTS } from "./constants";
@@ -323,6 +324,7 @@ export class VrmScene {
     try {
       const loader = new GLTFLoader();
       // Must be registered before `loadAsync`.
+      loader.setMeshoptDecoder(MeshoptDecoder);
       loader.register((parser) => new VRMLoaderPlugin(parser));
       const gltf = await loader.loadAsync(url);
       if (this.disposed) {

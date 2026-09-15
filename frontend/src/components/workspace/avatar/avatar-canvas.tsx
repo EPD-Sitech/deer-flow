@@ -15,6 +15,9 @@ interface AvatarCanvasProps {
   modelVersion: number;
   /** Bundled VRMA motion URL, or `null`/empty to stop any playing motion. */
   animationUrl: string | null;
+  /** When false, the motion plays once and returns to the standing pose
+   * instead of looping (used for click-triggered poses). Defaults to true. */
+  loopAnimation?: boolean;
   mouthProvider: () => number;
   onStatus: (status: AvatarModelStatus, mouthSupported: boolean) => void;
   onActivate?: () => void;
@@ -32,6 +35,7 @@ export function AvatarCanvas({
   model,
   modelVersion,
   animationUrl,
+  loopAnimation = true,
   mouthProvider,
   onStatus,
   onActivate,
@@ -44,6 +48,7 @@ export function AvatarCanvas({
     mouthProvider,
     onStatus,
     animationUrl,
+    loopAnimation,
     onActivate,
   });
 
@@ -52,6 +57,7 @@ export function AvatarCanvas({
       mouthProvider,
       onStatus,
       animationUrl,
+      loopAnimation,
       onActivate,
     };
   });
@@ -120,7 +126,10 @@ export function AvatarCanvas({
         // A motion chosen while the model was still loading must start once
         // the VRM is ready (`setAnimation` no-ops before the model exists).
         const url = latest.current.animationUrl;
-        await scene.setAnimation(url && url.length > 0 ? url : null);
+        await scene.setAnimation(
+          url && url.length > 0 ? url : null,
+          { loop: latest.current.loopAnimation },
+        );
       }
     })();
 
@@ -141,8 +150,9 @@ export function AvatarCanvas({
     }
     void scene.setAnimation(
       animationUrl && animationUrl.length > 0 ? animationUrl : null,
+      { loop: loopAnimation },
     );
-  }, [mounted, animationUrl, modelVersion]);
+  }, [mounted, animationUrl, modelVersion, loopAnimation]);
 
   return (
     <div

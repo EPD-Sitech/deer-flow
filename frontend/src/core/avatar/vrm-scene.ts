@@ -33,12 +33,17 @@ const MOTION_CROSSFADE_SECONDS = 0.35;
  * arms lie straight and close to the body instead of a "八" spread.
  */
 const RELAX_ARM_STEP_RADIANS = (2 * Math.PI) / 180;
-const RELAX_ARM_MAX_STEPS = 90;
+const RELAX_ARM_MAX_STEPS = 140;
 /**
- * Stops once the hand's horizontal distance from the vertical plane through its
- * shoulder is within this many metres (i.e. the arm is hanging straight down).
+ * Horizontal distance from the shoulder at which an arm is already considered
+ * relaxed. Arms inside this radius and not raised are left untouched.
  */
-const RELAX_ARM_SPREAD_TOLERANCE = 0.05;
+const RELAX_ARM_RELAXED_SPREAD = 0.14;
+const RELAX_ARM_RELAXED_ABOVE = 0.05;
+/** Target horizontal distance from the shoulder for the relaxed pose. */
+const RELAX_ARM_SPREAD_TOLERANCE = 0.06;
+/** Hard cap on the total correction applied to the arm bones. */
+const RELAX_ARM_ROT_CAP = (95 * Math.PI) / 180;
 
 /**
  * Procedural pose motion tuning.
@@ -140,7 +145,15 @@ export class VrmScene {
   private animationMixer: THREE.AnimationMixer | null = null;
   private animationAction: THREE.AnimationAction | null = null;
   private animationPlaying = false;
+  /** True after a one-shot motion finishes and its first frame is held. */
+  private poseFrozen = false;
   private currentAnimationUrl: string | null = null;
+  /** False when the current motion should run once (e.g. a click-triggered
+   * pose) and then stop in its first frame instead of looping. */
+  private animationLoop = true;
+  private oneShotFinishedHandler:
+    | ((event: { action: THREE.AnimationAction }) => void)
+    | null = null;
   private loadAnimationSeq = 0;
   private animationLoadFailed = false;
   private animationStopTimer: number | null = null;
@@ -216,8 +229,8 @@ export class VrmScene {
       return;
     }
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.2));
-    const key = new THREE.DirectionalLight(0xffffff, 0.9);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x9ba8b8, 1.6));
+    const key = new THREE.DirectionalLight(0xffffff, 1.35);
     key.position.set(0.4, 1.4, 1.6);
     this.scene.add(key);
 
@@ -379,12 +392,19 @@ export class VrmScene {
    * While a motion plays, the procedural gestures and idle sway are paused so
    * the animation reads as authored.
    */
-  async setAnimation(url: string | null): Promise<void> {
+  async setAnimation(
+    url: string | null,
+    options?: { loop?: boolean },
+  ): Promise<void> {
+    const loop = options?.loop ?? true;
     if (!url) {
       this.stopAnimation();
       return;
     }
     if (url === this.currentAnimationUrl) {
+      // Same motion re-requested: only re-arm the loop flag so a previously
+      // one-shot pose can be told to loop (or vice versa) on the next play.
+      this.animationLoop = loop;
       return;
     }
     const seq = ++this.loadAnimationSeq;
@@ -399,7 +419,7 @@ export class VrmScene {
       if (seq !== this.loadAnimationSeq || this.disposed || !this.vrm) {
         return;
       }
-      this.playAnimationClip(animation, url);
+      this.playAnimationClip(animation, url, loop);
     } catch (error) {
       if (seq !== this.loadAnimationSeq) {
         return;
@@ -435,7 +455,11 @@ export class VrmScene {
    * source VRMA quaternion directly to raw bones makes thumb joints depend on
    * the target model's local axes and can fold the thumb through the palm.
    */
-  private playAnimationClip(animation: VRMAnimation, url: string): void {
+  private playAnimationClip(
+    animation: VRMAnimation,
+    url: string,
+    loop: boolean,
+  ): void {
     const vrm = this.vrm;
     const humanoid = vrm?.humanoid;
     if (!vrm || !humanoid) {
@@ -443,6 +467,8 @@ export class VrmScene {
     }
     const clip = createVRMAnimationClip(animation, vrm);
     this.cancelAnimationStop();
+    this.clearOneShotHandler();
+    this.poseFrozen = false;
     // Authored motions target the normalized rig. Raw-bone procedural gestures
     // are only used when no authored motion is active.
     humanoid.resetNormalizedPose();
@@ -451,6 +477,16 @@ export class VrmScene {
     const previousAction = this.animationAction;
     const action = mixer.clipAction(clip);
     action.reset();
+    // A click-triggered pose plays a single time and then stops without
+    // starting another idle or standing animation.
+    if (loop) {
+      action.setLoop(THREE.LoopRepeat, Infinity);
+    } else {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      this.registerOneShotHandler(mixer, action);
+    }
+    this.animationLoop = loop;
     action.play();
     if (previousAction) {
       previousAction.crossFadeTo(action, MOTION_CROSSFADE_SECONDS, false);
@@ -468,10 +504,47 @@ export class VrmScene {
     this.currentAnimationUrl = url;
   }
 
+  private registerOneShotHandler(
+    mixer: THREE.AnimationMixer,
+    action: THREE.AnimationAction,
+  ): void {
+    const handler = (event: { action: THREE.AnimationAction }): void => {
+      if (event.action !== action) {
+        return;
+      }
+      this.clearOneShotHandler();
+      // Only stop the animation if this exact action is still the one on
+      // screen; a newer motion may have started during the crossfade.
+      if (this.animationAction === action) {
+        // Rewind to the first authored frame before stopping. This leaves the
+        // avatar static at the motion's start pose instead of holding its last
+        // frame or restoring the model's relaxed standing pose.
+        action.reset();
+        mixer.update(0);
+        this.poseFrozen = true;
+        this.finishAnimationStop({ restorePose: false });
+      }
+    };
+    this.oneShotFinishedHandler = handler;
+    mixer.addEventListener("finished", handler);
+  }
+
+  private clearOneShotHandler(): void {
+    if (this.oneShotFinishedHandler && this.animationMixer) {
+      this.animationMixer.removeEventListener(
+        "finished",
+        this.oneShotFinishedHandler,
+      );
+    }
+    this.oneShotFinishedHandler = null;
+  }
+
   private stopAnimation(): void {
     // A motion can be deselected while its VRMA file is still loading. Bump
     // the sequence so that late loader completion cannot resurrect the motion.
     this.loadAnimationSeq += 1;
+    this.clearOneShotHandler();
+    this.poseFrozen = false;
     const action = this.animationAction;
     if (action && this.animationMixer) {
       this.cancelAnimationStop();
@@ -488,9 +561,12 @@ export class VrmScene {
     this.finishAnimationStop();
   }
 
-  private finishAnimationStop(): void {
+  private finishAnimationStop(options: { restorePose?: boolean } = {}): void {
     this.cancelAnimationStop();
-    this.restorePose();
+    this.clearOneShotHandler();
+    if (options.restorePose !== false) {
+      this.restorePose();
+    }
     this.stopAnimationObjects();
     if (this.vrm?.humanoid) {
       this.vrm.humanoid.autoUpdateHumanBones = false;
@@ -508,6 +584,7 @@ export class VrmScene {
 
   private stopAnimationObjects(): void {
     this.cancelAnimationStop();
+    this.clearOneShotHandler();
     this.animationAction?.stop();
     this.animationAction = null;
     this.animationMixer?.stopAllAction();
@@ -572,6 +649,7 @@ export class VrmScene {
     this.vrm = null;
     this.mouthKeys = [];
     this.stopAnimationObjects();
+    this.poseFrozen = false;
     this.animationLoadFailed = false;
     this.currentAnimationUrl = null;
     this.loadAnimationSeq += 1;
@@ -617,15 +695,17 @@ export class VrmScene {
   /**
    * Correct the arms-down rest pose. Many VRM exporters (VRoid first among
    * them) bake an arms-out "presentation" rest pose into the model, which is
-   * why every imported avatar appears with its arms spread. We rotate each
-   * upper arm on its local Z axis so the hand hangs vertically under its own
-   * shoulder, tucking the arms flat against the body rather than leaving a
-   * "八" spread.
+   * why imported avatars often appear with their arms spread or thrust
+   * forward. We rotate the upper and lower arms so the hand hangs straight
+   * down beside the body, tucking the arms flat against it rather than leaving
+   * a "八" spread or a zombie-like forward reach.
    *
    * The raw skeleton is driven directly, so `autoUpdateHumanBones` is disabled
-   * to stop the per-frame normalized -> raw copy from overwriting the pose.
-   * Each step rotates in whichever local-Z direction lowers the hand; it stops
-   * once the hand is horizontally aligned under the shoulder.
+   * to stop the per-frame normalized -> raw copy from overwriting the pose. A
+   * greedy descent over each arm bone's local X/Y/Z axes minimises a cost of
+   * (horizontal distance from the shoulder + raised-above-shoulder penalty);
+   * a hard rotation cap keeps the limb from twisting into the body. Arms that
+   * already hang naturally are skipped untouched.
    */
   private relaxArms(vrm: VRM): void {
     const humanoid = vrm.humanoid;
@@ -637,47 +717,139 @@ export class VrmScene {
     for (const side of ["left", "right"] as const) {
       const hand = humanoid.getRawBoneNode(`${side}Hand`);
       const upper = humanoid.getRawBoneNode(`${side}UpperArm`);
+      const lower = humanoid.getRawBoneNode(`${side}LowerArm`);
       const shoulder = humanoid.getRawBoneNode(`${side}Shoulder`);
       if (!hand || !upper || !shoulder) {
         continue;
       }
+      // Both arm bones are steerable; a bent (elbow-forward) reach can only be
+      // straightened by rotating the lower arm too, so the upper arm alone
+      // would get stuck in a forward local minimum.
+      const armBones = [upper, lower].filter(
+        (bone): bone is THREE.Object3D => bone !== null,
+      );
 
-      for (let step = 0; step < RELAX_ARM_MAX_STEPS; step += 1) {
-        upper.updateWorldMatrix(true, false);
-        hand.updateWorldMatrix(true, false);
-        shoulder.updateWorldMatrix(true, false);
-        const spread = Math.abs(
-          hand.getWorldPosition(new THREE.Vector3()).x -
-            shoulder.getWorldPosition(new THREE.Vector3()).x,
+      const handWorld = (): THREE.Vector3 =>
+        hand.getWorldPosition(new THREE.Vector3());
+      const shoulderWorld = (): THREE.Vector3 =>
+        shoulder.getWorldPosition(new THREE.Vector3());
+      const starts = armBones.map((bone) => ({
+        x: bone.rotation.x,
+        y: bone.rotation.y,
+        z: bone.rotation.z,
+      }));
+      const rotMag = (): number =>
+        armBones.reduce(
+          (total, bone, index) =>
+            total +
+            Math.abs(bone.rotation.x - starts[index]!.x) +
+            Math.abs(bone.rotation.y - starts[index]!.y) +
+            Math.abs(bone.rotation.z - starts[index]!.z),
+          0,
         );
-        if (spread <= RELAX_ARM_SPREAD_TOLERANCE) {
+      // Horizontal (XZ) distance from the shoulder + a penalty for the hand
+      // sitting above its shoulder. Lower is a more relaxed, arms-down pose.
+      const cost = (): number => {
+        hand.updateWorldMatrix(true, false);
+        const hp = handWorld();
+        const sp = shoulderWorld();
+        const spread = Math.hypot(hp.x - sp.x, hp.z - sp.z);
+        const above = Math.max(0, hp.y - sp.y);
+        return spread + above * 1.5;
+      };
+      const getAngle = (bone: THREE.Object3D, axis: 0 | 1 | 2): number =>
+        axis === 0 ? bone.rotation.x : axis === 1 ? bone.rotation.y : bone.rotation.z;
+      const setAngle = (
+        bone: THREE.Object3D,
+        axis: 0 | 1 | 2,
+        value: number,
+      ): void => {
+        if (axis === 0) bone.rotation.x = value;
+        else if (axis === 1) bone.rotation.y = value;
+        else bone.rotation.z = value;
+        bone.updateMatrix();
+      };
+
+      shoulder.updateWorldMatrix(true, false);
+      hand.updateWorldMatrix(true, false);
+      const start = handWorld().sub(shoulderWorld());
+      const startSpread = Math.hypot(start.x, start.z);
+      const startAbove = start.y;
+      // Arm already hangs naturally: don't touch it, so models that ship a
+      // sensible rest pose keep it.
+      if (
+        startSpread <= RELAX_ARM_RELAXED_SPREAD &&
+        startAbove <= RELAX_ARM_RELAXED_ABOVE
+      ) {
+        continue;
+      }
+
+      // Greedily pick the (bone, axis, sign) that most reduces the cost this
+      // step, re-picking every step. Re-picking every step keeps the search from
+      // coiling the limb by committing to a single bone/axis, while the hard
+      // cap below bounds total rotation so the arm can never fold into the body.
+      const pickStep = (): {
+        bone: THREE.Object3D;
+        axis: 0 | 1 | 2;
+        sign: 1 | -1;
+      } | null => {
+        const baseCost = cost();
+        let best: {
+          bone: THREE.Object3D;
+          axis: 0 | 1 | 2;
+          sign: 1 | -1;
+        } | null = null;
+        let bestCost = baseCost;
+        for (const bone of armBones) {
+          for (const axis of [0, 1, 2] as const) {
+            for (const sign of [1, -1] as const) {
+              setAngle(bone, axis, getAngle(bone, axis) + sign * RELAX_ARM_STEP_RADIANS);
+              const candidate = cost();
+              setAngle(bone, axis, getAngle(bone, axis) - sign * RELAX_ARM_STEP_RADIANS);
+              if (candidate < bestCost - 1e-4) {
+                bestCost = candidate;
+                best = { bone, axis, sign };
+              }
+            }
+          }
+        }
+        return best;
+      };
+
+      let chosen = pickStep();
+      let guard = 0;
+      while (chosen && guard < RELAX_ARM_MAX_STEPS) {
+        guard += 1;
+        const { bone, axis, sign } = chosen;
+        const current = handWorld().sub(shoulderWorld());
+        // Already tucked beside the body: stop.
+        if (
+          Math.hypot(current.x, current.z) <= RELAX_ARM_SPREAD_TOLERANCE &&
+          current.y <= 0.02
+        ) {
           break;
         }
-
-        upper.updateWorldMatrix(true, false);
-        hand.updateWorldMatrix(true, false);
-        const before = hand.getWorldPosition(new THREE.Vector3()).y;
-
-        const saved = upper.rotation.clone();
-        upper.rotation.z += RELAX_ARM_STEP_RADIANS;
-        upper.updateMatrix();
-        hand.updateWorldMatrix(true, false);
-        const plus = hand.getWorldPosition(new THREE.Vector3()).y;
-
-        upper.rotation.copy(saved);
-        upper.updateMatrix();
-        upper.rotation.z -= RELAX_ARM_STEP_RADIANS;
-        upper.updateMatrix();
-        hand.updateWorldMatrix(true, false);
-        const minus = hand.getWorldPosition(new THREE.Vector3()).y;
-
-        upper.rotation.copy(saved);
-        if (plus >= before && minus >= before) {
+        if (rotMag() >= RELAX_ARM_ROT_CAP) {
           break;
         }
-        upper.rotation.z +=
-          plus < minus ? RELAX_ARM_STEP_RADIANS : -RELAX_ARM_STEP_RADIANS;
-        upper.updateMatrix();
+        const r = getAngle(bone, axis);
+        setAngle(bone, axis, r + sign * RELAX_ARM_STEP_RADIANS);
+        const cPlus = cost();
+        setAngle(bone, axis, r);
+        setAngle(bone, axis, r - sign * RELAX_ARM_STEP_RADIANS);
+        const cMinus = cost();
+        setAngle(bone, axis, r);
+        const currentCost = cost();
+        if (cPlus >= currentCost - 1e-4 && cMinus >= currentCost - 1e-4) {
+          chosen = pickStep();
+          continue;
+        }
+        if (cPlus < cMinus) {
+          setAngle(bone, axis, r + sign * RELAX_ARM_STEP_RADIANS);
+        } else {
+          setAngle(bone, axis, r - sign * RELAX_ARM_STEP_RADIANS);
+        }
+        chosen = pickStep();
       }
     }
   }
@@ -840,7 +1012,7 @@ export class VrmScene {
       // A VRMA motion is authoritative: pause the procedural gestures and the
       // idle sway so the animation reads exactly as authored.
       this.animationMixer?.update(delta);
-    } else {
+    } else if (!this.poseFrozen) {
       this.updateIdle(now);
       this.updateGestures(now);
     }

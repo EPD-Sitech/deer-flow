@@ -12,6 +12,9 @@ guide rather than expecting full detail here:
 - **[frontend/AGENTS.md](frontend/AGENTS.md)** — frontend depth: Next.js App Router layout,
   thread/streaming data flow, code style, commands.
 
+For every UI task, read `skills/custom/expert-ui-design/SKILL.md` before taking any
+implementation or design action.
+
 ## What is DeerFlow
 
 DeerFlow is a LangGraph-based AI super-agent system with a full-stack architecture. The

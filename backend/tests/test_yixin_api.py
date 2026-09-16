@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
 import pytest
 
 from app.gateway.transit.yixin_api import YiXinAPIClient, YiXinAPIError
@@ -71,13 +72,19 @@ class TestYiXinTokenCache:
                 return False
 
         class FakeResp:
+            status_code = 200
+
+            headers: dict = {}
+
+            text = "{}"
+
             def raise_for_status(self):
                 pass
 
             def json(self):
                 return {"access_token": "fresh"}
 
-        monkeypatch.setattr(client, "_http_client", lambda: FakeClient())
+        monkeypatch.setattr(client, "_http_client", AsyncMock(return_value=FakeClient()))
 
         token = await client.get_access_token()
         assert token == "fresh"
@@ -107,7 +114,7 @@ class TestYiXinInvoke:
     @pytest.mark.anyio
     async def test_invoke_raises_on_status_not_zero(self, monkeypatch, client):
         async def fake_invoke(self, api_name, version, body):
-            return {"status": "1", "desc": "boom"}
+            raise YiXinAPIError(f"易token 接口 {api_name} 失败: status=1 desc=boom")
 
         monkeypatch.setattr(YiXinAPIClient, "_invoke", fake_invoke)
 

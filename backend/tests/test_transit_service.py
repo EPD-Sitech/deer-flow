@@ -49,6 +49,7 @@ class TestGetYxUuidFromRequest:
         assert get_yx_uuid_from_request(request_with_state) is None
 
     def test_returns_claim(self, request_with_state, monkeypatch):
+        request_with_state.cookies = {"access_token": "token-1"}
         monkeypatch.setattr("app.gateway.transit.service.decode_token", lambda t: _payload("oncon1"))
         assert get_yx_uuid_from_request(request_with_state) == "oncon1"
 
@@ -59,6 +60,7 @@ class TestIsTransitUser:
         assert is_transit_user(request_with_state) is False
 
     def test_true_with_uuid(self, request_with_state, monkeypatch):
+        request_with_state.cookies = {"access_token": "token-1"}
         monkeypatch.setattr("app.gateway.transit.service.decode_token", lambda t: _payload("oncon1"))
         assert is_transit_user(request_with_state) is True
 
@@ -103,9 +105,25 @@ class TestFetchTransitModels:
         )
         monkeypatch.setattr(
             "app.gateway.transit.service.get_transit_catalog",
-            AsyncMock(return_value=[SimpleNamespace(name="m1", display_name="Model 1")]),
+            AsyncMock(
+                return_value=[
+                    SimpleNamespace(
+                        name="m1",
+                        display_name="Model 1",
+                        supports_thinking=False,
+                        supports_reasoning_effort=False,
+                    )
+                ]
+            ),
         )
         models = await fetch_transit_models("oncon1")
         assert models == [
-            {"name": "m1", "display_name": "Model 1", "supported_endpoint_types": ["openai"]}
+            {
+                "name": "m1",
+                "display_name": "Model 1",
+                "supported_endpoint_types": ["openai"],
+                "free": False,
+                "supports_thinking": False,
+                "supports_reasoning_effort": False,
+            }
         ]

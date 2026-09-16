@@ -30,6 +30,7 @@ from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.persistence.operation_events.model import OperationEventRow
 from deerflow.persistence.operation_inventory_snapshots.model import OperationInventorySnapshotRow
 from deerflow.persistence.personal_access_tokens.model import PersonalAccessTokenRow
+from deerflow.persistence.projects.model import ProjectRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_tasks.model import ScheduledTaskRow
@@ -50,6 +51,7 @@ __all__ = [
     "OperationEventRow",
     "OperationInventorySnapshotRow",
     "PersonalAccessTokenRow",
+    "ProjectRow",
     "RunEventRow",
     "RunRow",
     "ScheduledTaskRow",

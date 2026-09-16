@@ -58,7 +58,7 @@ COPY backend ./backend
 # to Redis (DEER_FLOW_STREAM_BRIDGE_REDIS_URL); it is an optional extra elsewhere
 # so slim non-Docker installs do not pull it.
 # When UV_EXTRAS is set (comma- or whitespace-separated), installs optional dependencies.
-# Frozen mode consumes the committed universal lock verbatim. This prevents an
+# Locked mode consumes the committed universal lock verbatim. This prevents an
 # unavailable package in an unselected optional extra from triggering a fresh
 # cross-platform resolution during an otherwise unrelated production build.
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -74,7 +74,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         esac; \
         extras_flags="$extras_flags --extra $extra"; \
     done; \
-    UV_INDEX_URL=${UV_INDEX_URL:-https://pypi.org/simple} uv sync --frozen --extra redis $extras_flags'
+    UV_INDEX_URL=${UV_INDEX_URL:-https://pypi.org/simple} uv sync --locked --extra redis $extras_flags'
 
 # UTF-8 locale prevents UnicodeEncodeError on Chinese/emoji content in minimal
 # containers where locale configuration may be missing and the default encoding is not UTF-8.

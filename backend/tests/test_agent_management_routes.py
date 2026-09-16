@@ -24,6 +24,16 @@ router_module = importlib.import_module("app.gateway.agent_management.router")
 sharing_router_module = importlib.import_module("app.gateway.agent_management.sharing_router")
 
 
+@pytest.fixture(autouse=True)
+def _enable_agents_api():
+    """Route handlers gate on agents_api.enabled; unit tests call handlers directly."""
+    from deerflow.config.agents_api_config import AgentsApiConfig, set_agents_api_config
+
+    set_agents_api_config(AgentsApiConfig(enabled=True))
+    yield
+    set_agents_api_config(AgentsApiConfig(enabled=False))
+
+
 def test_local_agent_management_routes_are_incremental_and_exclude_other_catalogs() -> None:
     paths = {(route.path, method) for route in extension_router.routes for method in route.methods}
 

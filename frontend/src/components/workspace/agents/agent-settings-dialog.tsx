@@ -190,6 +190,7 @@ export function AgentSettingsDialog({
   const { skills: skillsData, isLoading: skillsLoading } = useSkills();
   const { config: mcpConfig, isLoading: mcpLoading } = useMCPConfig();
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [displayName, setDisplayName] = useState(agent.display_name ?? "");
 
   const [description, setDescription] = useState(agent.description ?? "");
   const [avatarVersion, setAvatarVersion] = useState(0);
@@ -388,6 +389,10 @@ export function AgentSettingsDialog({
   }
 
   async function handleSave() {
+    if ([...displayName.trim()].length > 100) {
+      toast.error(t.agents.settingsDisplayNameTooLong);
+      return;
+    }
     const parsedSettings = parseAgentModelSettingsDraft({
       temperature,
       maxTokens,
@@ -402,6 +407,7 @@ export function AgentSettingsDialog({
     }
 
     const request: UpdateAgentRequest = {
+      display_name: displayName.trim() || null,
       description: description.trim() || null,
       model: model === DEFAULT_MODEL_VALUE ? null : model,
       model_settings: parsedSettings.modelSettings,
@@ -482,6 +488,24 @@ export function AgentSettingsDialog({
             }
           >
             <div className="space-y-2.5">
+              <div className="space-y-1">
+                <label
+                  htmlFor="agent-display-name"
+                  className="text-foreground block text-xs font-medium"
+                >
+                  {t.agents.settingsDisplayName}
+                </label>
+                <Input
+                  id="agent-display-name"
+                  value={displayName}
+                  placeholder={agent.name}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+                <p className="text-muted-foreground text-[11px]">
+                  {t.agents.settingsDisplayNameHint} ({agent.name}){" · "}
+                  {[...displayName.trim()].length}/100
+                </p>
+              </div>
               <div className="space-y-1">
                 <span className="text-foreground block text-xs font-medium">
                   名称

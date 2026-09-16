@@ -45,6 +45,7 @@ export interface Agent {
 
 export interface CreateAgentRequest {
   name: string;
+  display_name?: string | null;
   description?: string;
   model?: string | null;
   tool_groups?: string[] | null;
@@ -59,6 +60,7 @@ export interface CreateAgentRequest {
 }
 
 export interface UpdateAgentRequest {
+  display_name?: string | null;
   description?: string | null;
   model?: string | null;
   tool_groups?: string[] | null;

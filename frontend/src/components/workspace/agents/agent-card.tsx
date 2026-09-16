@@ -113,6 +113,9 @@ function TruncatedBadge({
 }
 
 export function AgentCard({ agent }: AgentCardProps) {
+  const displayName = agent.display_name?.length
+    ? agent.display_name
+    : agent.name;
   const { t } = useI18n();
   const router = useRouter();
   const deleteAgent = useDeleteAgent();
@@ -158,9 +161,9 @@ export function AgentCard({ agent }: AgentCardProps) {
                 className="h-9 w-9 shrink-0 rounded-full object-cover"
               />
               <div className="min-w-0">
-                <TruncatedTooltip text={agent.name}>
+                <TruncatedTooltip text={displayName}>
                   <CardTitle className="truncate text-base">
-                    {agent.name}
+                    {displayName}
                   </CardTitle>
                 </TruncatedTooltip>
                 {agent.model && (
@@ -182,7 +185,8 @@ export function AgentCard({ agent }: AgentCardProps) {
           )}
         </CardHeader>
 
-        {(agent.tool_groups?.length ?? agent.skills?.length ?? 0) > 0 && (
+        {((agent.tool_groups?.length ?? 0) > 0 ||
+          (agent.skills?.length ?? 0) > 0) && (
           <CardContent className="pt-0 pb-3">
             <div className="flex flex-wrap gap-1">
               {agent.tool_groups?.map((group) => (
@@ -233,7 +237,7 @@ export function AgentCard({ agent }: AgentCardProps) {
         </CardFooter>
       </Card>
 
-      {/* Model settings — mounted only while open so its form state always
+      {/* Agent settings — mounted only while open so its form state always
           re-seeds from the latest agent props (avoids stale values on reopen). */}
       {settingsOpen && (
         <AgentSettingsDialog

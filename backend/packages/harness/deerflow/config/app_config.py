@@ -44,6 +44,7 @@ from deerflow.config.subagent_runtime_config import SubagentRuntimeConfig
 from deerflow.config.subagents_config import SubagentsAppConfig, load_subagents_config_from_dict
 from deerflow.config.suggestions_config import SuggestionsConfig
 from deerflow.config.summarization_config import SummarizationConfig, load_summarization_config_from_dict
+from deerflow.config.task_continuity_config import TaskContinuityConfig
 from deerflow.config.title_config import TitleConfig, load_title_config_from_dict
 from deerflow.config.token_budget_config import TokenBudgetConfig
 from deerflow.config.token_usage_config import TokenUsageConfig
@@ -130,9 +131,18 @@ class LlmCallConfig(BaseModel):
 
 
 class LoggingEnhanceConfig(BaseModel):
-    """Request trace logging enhancement settings."""
+    """Request trace logging enhancement settings.
 
-    enabled: bool = Field(default=False, description="Enable request-level trace ids in Gateway response headers and log records.")
+    Trace ids are issued unconditionally (``TraceMiddleware`` for HTTP,
+    ``ensure_trace_context`` elsewhere) and always returned in the
+    ``X-Trace-Id`` response header. This block decides only whether log
+    records carry that id, and in which format.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Print the request trace id into log records. Trace ids are always issued and always returned in the X-Trace-Id response header; this controls log output only.",
+    )
     format: Literal["text", "json"] = Field(default="text", description="Enhanced log output format.")
 
 
@@ -203,7 +213,7 @@ class AppConfig(BaseModel):
         default_factory=LoggingConfig,
         description=format_field_description(
             "logging",
-            field_doc="Structured logging and request trace correlation settings.",
+            field_doc="Structured logging settings: whether request trace ids appear in log records, and in which format.",
         ),
     )
     token_usage: TokenUsageConfig = Field(default_factory=TokenUsageConfig, description="Token usage tracking configuration")
@@ -221,10 +231,15 @@ class AppConfig(BaseModel):
             ),
         ),
     )
+    recursion_limit: int = Field(
+        default=100,
+        ge=1,
+        description="Default LangGraph recursion_limit for Gateway runs when the client does not provide one. Applied per run and capped by max_recursion_limit.",
+    )
     max_recursion_limit: int = Field(
         default=1000,
         ge=1,
-        description="Hard server-side ceiling for a client-supplied run recursion_limit. Client values above this are clamped; prevents runaway LangGraph super-steps (LLM cost / DoS).",
+        description="Hard server-side ceiling for configured defaults and client-supplied run recursion_limit values. Values above this are clamped; prevents runaway LangGraph super-steps (LLM cost / DoS).",
     )
     models: list[ModelConfig] = Field(default_factory=list, description="Available models")
     sandbox: SandboxConfig = Field(
@@ -243,6 +258,7 @@ class AppConfig(BaseModel):
     tool_search: ToolSearchConfig = Field(default_factory=ToolSearchConfig, description="Tool search / deferred loading configuration")
     title: TitleConfig = Field(default_factory=TitleConfig, description="Automatic title generation configuration")
     summarization: SummarizationConfig = Field(default_factory=SummarizationConfig, description="Conversation summarization configuration")
+    task_continuity: TaskContinuityConfig = Field(default_factory=TaskContinuityConfig, description="Thread-local notes and compacted-source recall")
     memory: MemoryConfig = Field(default_factory=MemoryConfig, description="Memory subsystem configuration")
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
@@ -292,7 +308,7 @@ class AppConfig(BaseModel):
         default_factory=SchedulerConfig,
         description=format_field_description(
             "scheduler",
-            field_doc="Scheduled task runtime configuration (background poller for one-time and cron agent runs).",
+            field_doc="Scheduled task runtime configuration (background poller for one-time, cron, and interval agent runs).",
         ),
     )
     mcp_tasks: McpTasksConfig = Field(

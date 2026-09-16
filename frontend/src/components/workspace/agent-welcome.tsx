@@ -34,7 +34,9 @@ export function AgentWelcome({
     return () =>
       window.removeEventListener(AGENT_AVATAR_UPDATED_EVENT, handleUpdate);
   }, [agentName, avatarScope]);
-  const displayName = agent?.display_name ?? agent?.name ?? agentName;
+  const displayName = agent?.display_name?.length
+    ? agent.display_name
+    : (agent?.name ?? agentName);
   const description = agent?.description;
 
   return (

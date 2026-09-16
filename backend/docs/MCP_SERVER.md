@@ -98,6 +98,43 @@ For Docker, point `url` at the OpenViking address reachable from the Gateway
 container, such as `http://openviking:1933/mcp` for a shared Compose network or
 `http://host.docker.internal:1933/mcp` for a host-installed server.
 
+## Parallel Search (optional)
+
+The `parallel-search` entry in `extensions_config.example.json` is disabled by
+default. To opt in, copy that entry into `mcpServers` in your root
+`extensions_config.json`, set `"enabled": true`, and restart DeerFlow. It connects
+to `https://search.parallel.ai/mcp` over HTTP and adds Parallel's search and fetch
+tools. With DeerFlow's default tool-name prefix, the agent sees
+`parallel-search_web_search` and `parallel-search_web_fetch`. Existing search
+providers and defaults stay unchanged.
+
+This is a third-party service operated by Parallel.ai. Search calls send
+objectives and queries to Parallel; fetch calls send requested page URLs and
+any extraction objective. These inputs can contain information from your
+conversation, so enable it only if you are comfortable sending that data to
+Parallel.
+
+Access is anonymous by default: no API key or authentication headers are needed.
+For higher rate limits, optionally add this `headers` field to the
+`parallel-search` entry in your local `extensions_config.json`:
+
+```json
+{
+  "headers": {
+    "Authorization": "$PARALLEL_AUTHORIZATION"
+  }
+}
+```
+
+Set `PARALLEL_AUTHORIZATION` in the DeerFlow backend's environment to the full
+value `Bearer <your-parallel-api-key>`, then restart DeerFlow. Include `Bearer `
+in the environment variable because DeerFlow expands only whole-string
+`$ENV_VAR` references, not `Bearer $ENV_VAR`. Keep the actual key out of committed
+files. Remove the `headers` field and restart DeerFlow to return to anonymous
+access. See the
+[Parallel Search MCP documentation](https://docs.parallel.ai/integrations/mcp/search-mcp)
+for details.
+
 ## Routing Hints
 
 Use `routing` when an MCP server should be preferred for specific requests, such
@@ -179,6 +216,20 @@ that name instead of becoming
 backward compatibility. Disable it only when every resulting tool name remains
 unique across the enabled servers. Stdio tools continue to use DeerFlow's
 persistent per-thread session pool regardless of this setting.
+
+Session reuse also requires the same owning event loop. Parallel synchronous
+tool calls from the embedded client use separate loops and separate stdio
+sessions, so they can finish independently without cancelling a sibling's
+connection. They do not share server-side state. The synchronous wrapper closes
+its loop after each call; use the asynchronous path on a shared loop when
+session continuity is required. Explicit pool cleanup covers all loops for the
+selected server/thread scope.
+
+If you manage event loops manually, close the pool or cancel and await its owner
+tasks before closing their loop. Calling `loop.close()` with pending owners
+prevents transport teardown and completion callbacks. Abandoned live-registry
+records can be removed by LRU eviction or explicit cleanup, but those operations
+cannot finish transport cleanup on a loop that has already closed.
 
 ## Server Timeouts
 
@@ -427,6 +478,14 @@ The caller supplies the values on each run request:
   the discovery credential — which in a multi-tenant deployment would send one
   tenant's request under another tenant's authority. Set `"passthrough"` to opt
   out and forward the static headers instead.
+- A value that cannot be sent as an HTTP header — a stray newline picked up
+  when reading a token from a file, leading/trailing whitespace, characters
+  outside ASCII — is always denied, regardless of `on_missing`. The error
+  names the offending key but never repeats the value; without this check a
+  newline or stray whitespace would reach h11, whose rejection echoes the full
+  credential into a model-visible tool error. The same check covers every other
+  way a value reaches these headers: `user_auth`, the OAuth token returned by
+  the token endpoint, and the static `headers` in the config file.
 - Precedence for a server declaring several sources: static `headers` <
   `oauth` < `user_auth` < `headers_from_context`. The value chosen for this one
   request is the most specific, so it wins.

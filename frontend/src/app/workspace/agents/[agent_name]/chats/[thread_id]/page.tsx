@@ -37,6 +37,7 @@ import {
   SidecarProvider,
   SidecarTrigger,
 } from "@/components/workspace/sidecar";
+import { ThreadArchiveStatus } from "@/components/workspace/thread-archive-status";
 import { ThreadBackgroundTasks } from "@/components/workspace/thread-background-tasks";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
 import { ThreadTitle } from "@/components/workspace/thread-title";
@@ -45,6 +46,8 @@ import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicato
 import { Tooltip } from "@/components/workspace/tooltip";
 import { useActiveGoal } from "@/components/workspace/use-active-goal";
 import { useAgent } from "@/core/agents";
+import { useAuth } from "@/core/auth/AuthProvider";
+import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import { useBrowserControlEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -57,6 +60,7 @@ import { isHiddenFromUIMessage } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { useNotification } from "@/core/notification/hooks";
 import { useLocalSettings, useThreadSettings } from "@/core/settings";
+import { resolveThreadContext } from "@/core/settings/store";
 import {
   useThreadMetadata,
   useThreadStream,
@@ -73,6 +77,8 @@ import { cn } from "@/lib/utils";
 export default function AgentChatPage() {
   const { t } = useI18n();
   const { textInput } = usePromptInputController();
+  const { user } = useAuth();
+  const canStopStreaming = hasPermission(user, PERMISSIONS.RUNS_CANCEL);
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialPrompt = searchParams.get("prompt") ?? undefined;
@@ -316,8 +322,8 @@ export default function AgentChatPage() {
               className={cn(
                 "relative z-30 flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 px-2 pt-[env(safe-area-inset-top)] sm:px-4",
                 isWelcomeMode
-                  ? "bg-background/0 backdrop-blur-none"
-                  : "bg-background/80 shadow-xs backdrop-blur",
+                  ? "bg-background/0 z-40 backdrop-blur-none"
+                  : "bg-background/80 z-30 shadow-xs backdrop-blur",
               )}
             >
               <SidebarTrigger className="md:hidden" />
@@ -336,7 +342,19 @@ export default function AgentChatPage() {
               </div>
 
               <div className="hidden min-w-0 flex-1 items-center text-sm font-medium sm:flex">
-                <ThreadTitle threadId={threadId} thread={thread} />
+                <ThreadTitle
+                  threadId={threadId}
+                  thread={thread}
+                  canonicalTitle={threadMetadata.data?.values?.title}
+                />
+                {!isNewThread &&
+                  !isMock &&
+                  env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
+                    <ThreadArchiveStatus
+                      threadId={threadId}
+                      metadata={threadMetadata.data?.metadata}
+                    />
+                  )}
               </div>
               <div className="flex shrink-0 items-center sm:mr-4">
                 {!isNewThread &&
@@ -398,6 +416,9 @@ export default function AgentChatPage() {
                 )}
               >
                 <MessageList
+                  archiveDownloadsEnabled={
+                    isNewThread || isMock || threadMetadata.data != null
+                  }
                   className={cn("size-full", !isWelcomeMode && "pt-10")}
                   testId="main-message-list"
                   threadId={threadId}
@@ -515,12 +536,15 @@ export default function AgentChatPage() {
                           isUploading ||
                           (!isNewThread && isHistoryLoading)
                         }
-                        onContextChange={(context) =>
-                          setSettings("context", context)
-                        }
+                        onContextChange={(context, options) => {
+                          if (options?.automatic)
+                            resolveThreadContext(threadId, context);
+                          else setSettings("context", context);
+                        }}
                         onGoalChange={setLocalGoal}
                         onSubmit={handleSubmit}
                         onStop={handleStop}
+                        canStopStreaming={canStopStreaming}
                       />
                     </>
                   )}
